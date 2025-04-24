@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Adicionar Estoque</h1>
+
+<!-- Formulário para adicionar estoque -->
+<form method="POST">
+    <div class="mb-3">
+        <label for="quantidade" class="form-label">Quantidade a Adicionar:</label>
+        <input type="number" name="quantidade" id="quantidade" class="form-control" required>
+    </div>
+
+    <button type="submit" class="btn btn-success">Adicionar Estoque</button>
+    <a href="{{ url_for('produtos') }}" class="btn btn-secondary">Voltar</a>
+</form>
+{% endblock %}

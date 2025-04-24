@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Editar Produto</h1>
+
+<form method="POST" enctype="multipart/form-data">
+    <div class="mb-3">
+        <label for="nome" class="form-label">Nome:</label>
+        <input type="text" name="nome" id="nome" class="form-control" value="{{ produto.nome }}" required>
+    </div>
+
+    <div class="mb-3">
+        <label for="preco" class="form-label">Preço:</label>
+        <input type="number" name="preco" id="preco" class="form-control" value="{{ produto.preco }}" step="0.01" required>
+    </div>
+
+    <div class="mb-3">
+        <label for="estoque" class="form-label">Estoque:</label>
+        <input type="number" name="estoque" id="estoque" class="form-control" value="{{ produto.estoque }}" required>
+    </div>
+
+    <div class="mb-3">
+        <label for="imagem" class="form-label">Imagem (opcional):</label>
+        <input type="file" name="imagem" id="imagem" class="form-control">
+        {% if produto.imagem %}
+            <p class="mt-2">Imagem atual:</p>
+            <img src="{{ url_for('static', filename='uploads/' ~ produto.imagem) }}" width="150">
+        {% endif %}
+    </div>
+
+    <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+    <a href="{{ url_for('produtos') }}" class="btn btn-secondary">Voltar</a>
+</form>
+{% endblock %}
+

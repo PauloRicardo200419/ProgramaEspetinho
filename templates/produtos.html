@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <nav class="col-md-3 col-lg-2 d-md-block bg-dark text-white sidebar p-4">
+            <div class="position-sticky">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'venda' %} active {% endif %}" href="{{ url_for('venda') }}">
+                            <i class="bi bi-cart"></i> <span class="ms-2">Venda</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'historico' %} active {% endif %}" href="{{ url_for('historico') }}">
+                            <i class="bi bi-journal-text"></i> <span class="ms-2">Histórico</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'produtos' %} active {% endif %}" href="{{ url_for('produtos') }}">
+                            <i class="bi bi-box"></i> <span class="ms-2">Produtos</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-4 main-content">
+            <h1 class="mb-4 text-center text-primary">Gestão de Produtos</h1>
+
+            <!-- Botão para abrir o modal de criação de produto -->
+            <button id="btnAdicionarProduto" class="btn btn-success mb-3" data-bs-toggle="modal" data-bs-target="#modalProduto">
+                Adicionar Novo Produto
+            </button>
+
+            <!-- Barra de busca -->
+            <div class="mb-3">
+                <label for="search" class="form-label">Buscar Produto:</label>
+                <input type="text" id="search" class="form-control" onkeyup="buscarProduto()" placeholder="Digite o nome do produto...">
+            </div>
+
+            <!-- Tabela de produtos -->
+            <h2 class="mt-5">Lista de Produtos</h2>
+            <table class="table table-striped" id="tabelaProdutos">
+                <thead>
+                    <tr>
+                        <th>Imagem</th>
+                        <th>Nome</th>
+                        <th>Preço</th>
+                        <th>Estoque</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for produto in produtos %}
+                    <tr>
+                        <td>
+                            {% if produto.imagem %}
+                                <img src="{{ url_for('static', filename='uploads/' ~ produto.imagem) }}" alt="Imagem do Produto" width="60" class="img-thumbnail">
+                            {% else %}
+                                <span class="text-muted">Sem imagem</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ produto.nome }}</td>
+                        <td>R$ {{ produto.preco|round(2) }}</td>
+                        <td>{{ produto.estoque }}</td>
+                        <td>
+                            <a href="{{ url_for('editar_produto', id=produto.id) }}" class="btn btn-primary btn-sm">Editar</a>
+                            <a href="{{ url_for('adicionar_estoque', id=produto.id) }}" class="btn btn-warning btn-sm">Adicionar Estoque</a>
+                            <form action="{{ url_for('deletar_produto', id=produto.id) }}" method="POST" style="display:inline;">
+                                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Tem certeza que deseja excluir?')">Excluir</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Modal de criação de produto -->
+            <div class="modal fade" id="modalProduto" tabindex="-1" aria-labelledby="modalProdutoLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="modalProdutoLabel">Adicionar Novo Produto</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form action="{{ url_for('produtos') }}" method="POST" enctype="multipart/form-data">
+                                <div class="mb-3">
+                                    <label for="nome" class="form-label">Nome:</label>
+                                    <input type="text" id="nome" name="nome" class="form-control" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="preco" class="form-label">Preço:</label>
+                                    <input type="text" id="preco" name="preco" class="form-control" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="estoque" class="form-label">Estoque:</label>
+                                    <input type="text" id="estoque" name="estoque" class="form-control" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="imagem" class="form-label">Imagem do Produto:</label>
+                                    <input type="file" id="imagem" name="imagem" class="form-control" accept="image/*">
+                                </div>
+                                <button type="submit" class="btn btn-success">Adicionar Produto</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+    function buscarProduto() {
+        var input = document.getElementById("search");
+        var filter = input.value.toLowerCase();
+        var table = document.getElementById("tabelaProdutos");
+        var tr = table.getElementsByTagName("tr");
+
+        for (var i = 0; i < tr.length; i++) {
+            var td = tr[i].getElementsByTagName("td")[1]; // nome do produto (segunda coluna)
+            if (td) {
+                var txtValue = td.textContent || td.innerText;
+                tr[i].style.display = txtValue.toLowerCase().indexOf(filter) > -1 ? "" : "none";
+            }
+        }
+    }
+</script>
+
+<style>
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 250px;
+        padding-top: 20px;
+        background-color: #343a40;
+        color: #fff;
+    }
+
+    .sidebar .nav-link {
+        font-size: 16px;
+        padding: 15px 20px;
+        margin: 5px 0;
+        border-radius: 10px;
+        transition: background-color 0.3s ease;
+    }
+
+    .sidebar .nav-link.active {
+        background-color: #007bff;
+        color: white;
+    }
+
+    .sidebar .nav-link:hover {
+        background-color: #495057;
+        color: #fff;
+    }
+
+    .sidebar i {
+        font-size: 20px;
+    }
+
+    .main-content {
+        padding-left: 260px;
+    }
+
+    .card {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+        transform: translateY(-10px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .hover-shadow:hover {
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    }
+
+    .text-primary {
+        color: #007bff !important;
+    }
+
+    @media (max-width: 768px) {
+        .sidebar {
+            position: static;
+            width: 100%;
+            height: auto;
+            padding: 20px 0;
+        }
+
+        .main-content {
+            padding-left: 0;
+        }
+
+        .card {
+            margin-bottom: 20px;
+        }
+    }
+</style>
+{% endblock %}

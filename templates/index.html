@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Vendas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 10px 0;
+            text-align: center;
+        }
+        nav {
+            background-color: #444;
+            padding: 10px;
+            text-align: center;
+        }
+        nav a {
+            color: white;
+            margin: 0 15px;
+            text-decoration: none;
+            font-size: 16px;
+        }
+        nav a:hover {
+            background-color: #575757;
+            padding: 5px;
+        }
+        .content {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Sistema de Vendas</h1>
+</header>
+
+<nav>
+    <a href="{{ url_for('produtos') }}">Produtos</a>
+    <a href="{{ url_for('venda') }}">Vendas</a>
+    <a href="{{ url_for('historico') }}">Histórico de Vendas</a>
+</nav>
+
+<div class="content">
+    <h2>Bem-vindo ao Sistema de Vendas!</h2>
+    <p>Selecione uma opção acima para começar.</p>
+</div>
+
+</body>
+</html>

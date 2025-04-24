@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <nav class="col-md-3 col-lg-2 d-md-block bg-dark text-white sidebar p-4">
+            <div class="position-sticky">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'venda' %} active {% endif %}" href="{{ url_for('venda') }}">
+                            <i class="bi bi-cart"></i> <span class="ms-2">Venda</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'historico' %} active {% endif %}" href="{{ url_for('historico') }}">
+                            <i class="bi bi-journal-text"></i> <span class="ms-2">Histórico</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'produtos' %} active {% endif %}" href="{{ url_for('produtos') }}">
+                            <i class="bi bi-box"></i> <span class="ms-2">Produtos</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-4">
+            <div class="container mt-4">
+                <h2 class="mb-4 text-center text-primary">📜 Histórico de Vendas</h2>
+
+                <!-- Exibição de Total e Quantidade de Vendas -->
+                <div class="mb-4">
+                    <h4>Valor Total de Vendas: R$ <span id="totalVendas">{{ vendas | sum(attribute='total') | round(2) }}</span></h4>
+                    <h4>Quantidade de Vendas: <span id="quantidadeVendas">{{ vendas | length }}</span></h4>
+                </div>
+
+                <!-- Filtro de Data -->
+                <div class="mb-4">
+                    <label for="filtroData" class="form-label">Filtrar por Data:</label>
+                    <input type="date" id="filtroData" class="form-control" onchange="filtrarPorData()">
+                </div>
+
+                {% if vendas %}
+                    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-4" id="vendasLista">
+                        {% for venda in vendas %}
+                        <div class="col venda-item" data-data="{{ venda.data.strftime('%Y-%m-%d') }}" data-total="{{ venda.total }}">
+                            <a href="{{ url_for('detalhes_venda', id=venda.id) }}" class="text-decoration-none">
+                                <div class="card shadow-lg border-0 rounded-3 h-100 hover-shadow">
+                                    <div class="card-body">
+                                        <h5 class="card-title text-dark">🧾 Venda #{{ venda.id }}</h5>
+                                        <p class="card-text mb-1">
+                                            <strong>Total:</strong> R$ {{ venda.total|round(2) }}
+                                        </p>
+                                        <p class="card-text text-muted">
+                                            <small>{{ venda.data.strftime('%d/%m/%Y %H:%M') }}</small>
+                                        </p>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info text-center" role="alert">
+                        Nenhuma venda registrada ainda.
+                    </div>
+                {% endif %}
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- Adicionando estilos customizados para melhorar a responsividade -->
+<style>
+    /* Sidebar */
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 250px;
+        padding-top: 20px;
+        background-color: #343a40;
+        color: #fff;
+    }
+
+    .sidebar .nav-link {
+        font-size: 16px;
+        padding: 15px 20px;
+        margin: 5px 0;
+        border-radius: 10px;
+        transition: background-color 0.3s ease;
+    }
+
+    .sidebar .nav-link.active {
+        background-color: #007bff;
+        color: white;
+    }
+
+    .sidebar .nav-link:hover {
+        background-color: #495057;
+        color: #fff;
+    }
+
+    .sidebar i {
+        font-size: 20px;
+    }
+
+    /* Main Content */
+    .main-content {
+        padding-left: 260px;
+    }
+
+    .card {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+        transform: translateY(-10px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .hover-shadow:hover {
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    }
+
+    .text-primary {
+        color: #007bff !important;
+    }
+
+    @media (max-width: 768px) {
+        /* Ajustando a sidebar para ser mobile-friendly */
+        .sidebar {
+            position: static;
+            width: 100%;
+            height: auto;
+            padding: 20px 0;
+        }
+
+        .main-content {
+            padding-left: 0;
+        }
+
+        .card {
+            margin-bottom: 20px;
+        }
+    }
+</style>
+
+<!-- Script para filtrar as vendas por data e atualizar valores de total e quantidade -->
+<script>
+    // Função para filtrar as vendas por data
+    function filtrarPorData() {
+        var inputData = document.getElementById("filtroData");
+        var filtroData = inputData.value;
+        var cards = document.querySelectorAll(".venda-item");
+        var totalVendas = 0;
+        var quantidadeVendas = 0;
+        var vendasFiltradas = 0;
+
+        // Iterar sobre as vendas para aplicar o filtro de data
+        for (var i = 0; i < cards.length; i++) {
+            var card = cards[i];
+            var dataVenda = card.getAttribute("data-data");
+
+            if (filtroData === dataVenda || filtroData === "") {
+                card.style.display = "block";  // Exibe o card da venda
+                var vendaTotal = parseFloat(card.getAttribute("data-total")); // Acessa o valor do total da venda diretamente do atributo data-total
+                totalVendas += vendaTotal;
+                quantidadeVendas++;
+                vendasFiltradas++;
+            } else {
+                card.style.display = "none";  // Oculta o card da venda
+            }
+        }
+
+        // Atualizar os valores de total e quantidade
+        document.getElementById("totalVendas").textContent = totalVendas.toFixed(2);
+        document.getElementById("quantidadeVendas").textContent = quantidadeVendas;
+
+        // Se não houver vendas para a data filtrada, zerar os valores
+        if (vendasFiltradas === 0) {
+            document.getElementById("totalVendas").textContent = "0.00";
+            document.getElementById("quantidadeVendas").textContent = "0";
+        }
+    }
+
+    // Preencher automaticamente com a data atual ao carregar a página
+    window.onload = function() {
+        var hoje = new Date();
+        var dataAtual = hoje.toISOString().split('T')[0]; // Obtém a data no formato YYYY-MM-DD
+        document.getElementById("filtroData").value = dataAtual;
+        filtrarPorData(); // Aplica o filtro automaticamente
+    };
+</script>
+
+{% endblock %}
