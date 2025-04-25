@@ -31,6 +31,14 @@ class Produto(db.Model):
     imagem = db.Column(db.String(255))
     itens_venda = db.relationship('ItemVenda', back_populates='produto')
 
+class Insumo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False)
+    unidade = db.Column(db.String(20), nullable=False)
+    quantidade = db.Column(db.Float, nullable=False)
+    custo = db.Column(db.Float, nullable=False)
+
+
 class Venda(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     data = db.Column(db.DateTime, default=lambda: datetime.now(pytz.timezone('America/Sao_Paulo')))
@@ -119,6 +127,62 @@ def deletar_produto(id):
     db.session.commit()
     return redirect(url_for('produtos'))
 
+@app.route('/insumos', methods=['GET', 'POST'])
+def insumos():
+    if request.method == 'POST':
+        nome = request.form['nome']
+        unidade = request.form['unidade']
+        quantidade = request.form['quantidade']  # <- Alterado para 'quantidade'
+        custo = request.form['custo']
+
+        # Aqui você pode salvar no banco de dados
+        novo_insumo = Insumo(nome=nome, unidade=unidade, quantidade=quantidade, custo=custo)  # <- Alterado para 'quantidade'
+        db.session.add(novo_insumo)
+        db.session.commit()
+
+        return redirect(url_for('insumos'))
+
+    insumos = Insumo.query.all()
+    return render_template('insumos.html', insumos=insumos)
+
+
+
+
+@app.route('/editar_insumo/<int:id>', methods=['GET', 'POST'])
+def editar_insumo(id):
+    insumo = Insumo.query.get(id)
+
+    if request.method == 'POST':
+        insumo.nome = request.form['nome']
+        insumo.quantidade = int(request.form['quantidade'])
+        insumo.unidade = request.form['unidade']
+        db.session.commit()
+        return redirect(url_for('insumos'))
+    
+    return render_template('editar_insumo.html', insumo=insumo)
+
+
+@app.route('/adicionar_estoque_insumo/<int:id>', methods=['GET', 'POST'])
+def adicionar_estoque_insumo(id):
+    insumo = Insumo.query.get(id)
+
+    if request.method == 'POST':
+        adicional = int(request.form['quantidade'])
+        insumo.quantidade += adicional
+        db.session.commit()
+        return redirect(url_for('insumos'))
+    
+    return render_template('adicionar_estoque_insumo.html', insumo=insumo)
+
+
+@app.route('/deletar_insumo/<int:id>', methods=['POST'])
+def deletar_insumo(id):
+    insumo = Insumo.query.get(id)
+    db.session.delete(insumo)
+    db.session.commit()
+    return redirect(url_for('insumos'))
+
+
 #Venda
 
 @app.route('/venda', methods=['GET', 'POST'])
@@ -144,13 +208,25 @@ def venda():
                 nova_quantidade = int(request.form[quantidade_key])
                 produto = Produto.query.get(item['produto_id'])
 
-                # Atualiza o estoque: primeiro, reverte a quantidade anterior
-                produto.estoque += item['quantidade']  # Reverte o estoque do item anterior
-                produto.estoque -= nova_quantidade  # Atualiza com a nova quantidade
-                db.session.commit()  # Atualiza no banco de dados
+                # Calcular a diferença de estoque entre a quantidade atual e a nova
+                quantidade_atual_no_carrinho = item['quantidade']
+
+                # Caso a quantidade tenha aumentado
+                if nova_quantidade > quantidade_atual_no_carrinho:
+                    diferenca = nova_quantidade - quantidade_atual_no_carrinho  # A quantidade aumentou
+                    if produto.estoque < diferenca:
+                        flash(f"Estoque insuficiente para {produto.nome}. Disponível: {produto.estoque}", 'danger')
+                        return redirect(url_for('venda'))
+                    produto.estoque -= diferenca  # Subtrai do estoque
+                # Caso a quantidade tenha diminuído
+                elif nova_quantidade < quantidade_atual_no_carrinho:
+                    diferenca = quantidade_atual_no_carrinho - nova_quantidade  # A quantidade diminuiu
+                    produto.estoque += diferenca  # Adiciona de volta ao estoque
 
                 # Atualiza a quantidade no carrinho
                 item['quantidade'] = nova_quantidade
+
+                db.session.commit()  # Atualiza o estoque no banco de dados
                 session.modified = True
 
         # Capturar a observação
@@ -169,18 +245,17 @@ def venda():
                 return redirect(url_for('venda'))
 
             # Verifica se o produto já está no carrinho
-            for item in session['carrinho']:
-                if item['produto_id'] == produto_id:
-                    item['quantidade'] += quantidade
-                    produto.estoque -= quantidade  # Atualiza o estoque ao adicionar no carrinho
-                    db.session.commit()  # Atualiza o estoque no banco
-                    session.modified = True
-                    return redirect(url_for('venda'))
+            produto_no_carrinho = next((item for item in session['carrinho'] if item['produto_id'] == produto_id), None)
+            if produto_no_carrinho:
+                # Se o produto já estiver no carrinho, atualiza a quantidade
+                produto_no_carrinho['quantidade'] = quantidade
+            else:
+                # Se não, adiciona ao carrinho
+                session['carrinho'].append({'produto_id': produto_id, 'quantidade': quantidade})
 
-            # Adiciona item ao carrinho
-            session['carrinho'].append({'produto_id': produto_id, 'quantidade': quantidade})
-            produto.estoque -= quantidade  # Atualiza o estoque ao adicionar no carrinho
-            db.session.commit()  # Atualiza o estoque no banco
+            # Atualiza o estoque do produto no banco
+            produto.estoque -= quantidade
+            db.session.commit()
             session.modified = True
 
     carrinho = []
@@ -203,6 +278,10 @@ def venda():
 
     # Passa a observação para o template
     return render_template('venda.html', produtos=produtos, carrinho=carrinho, total=total, observacao=session.get('observacao', ''))
+
+
+
+
 
 
 

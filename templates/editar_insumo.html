@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="text-center text-primary">Editar Insumo</h1>
+    <form action="{{ url_for('editar_insumo', id=insumo.id) }}" method="POST" class="mt-4">
+        <div class="mb-3">
+            <label for="nome" class="form-label">Nome:</label>
+            <input type="text" name="nome" id="nome" class="form-control" value="{{ insumo.nome }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="unidade" class="form-label">Unidade (ex: kg, m, L):</label>
+            <input type="text" name="unidade" id="unidade" class="form-control" value="{{ insumo.unidade }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="quantidade" class="form-label">Quantidade:</label>
+            <input type="number" name="quantidade" id="quantidade" class="form-control" value="{{ insumo.quantidade }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="custo" class="form-label">Custo Unitário:</label>
+            <input type="number" name="custo" id="custo" class="form-control" step="0.01" value="{{ insumo.custo }}" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+        <a href="{{ url_for('insumos') }}" class="btn btn-secondary">Cancelar</a>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,180 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row">
+    <!-- Sidebar -->
+    <nav class="col-md-3 col-lg-2 d-md-block bg-dark text-white sidebar p-4">
+        <div class="position-sticky">
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'venda' %} active {% endif %}" href="{{ url_for('venda') }}">
+                        <i class="bi bi-cart"></i> <span class="ms-2">Venda</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'historico' %} active {% endif %}" href="{{ url_for('historico') }}">
+                        <i class="bi bi-journal-text"></i> <span class="ms-2">Histórico</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'produtos' %} active {% endif %}" href="{{ url_for('produtos') }}">
+                        <i class="bi bi-box"></i> <span class="ms-2">Produtos</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'insumos' %} active {% endif %}" href="{{ url_for('insumos') }}">
+                        <i class="bi bi-box"></i> <span class="ms-2">Insumos</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+        <!-- Main Content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-4 main-content">
+            <h1 class="mb-4 text-center text-primary">Gestão de Insumos</h1>
+
+            <!-- Botão para abrir o modal de criação de insumo -->
+            <button class="btn btn-success mb-3" data-bs-toggle="modal" data-bs-target="#modalInsumo">
+                Adicionar Novo Insumo
+            </button>
+
+            <!-- Barra de busca -->
+            <div class="mb-3">
+                <label for="searchInsumo" class="form-label">Buscar Insumo:</label>
+                <input type="text" id="searchInsumo" class="form-control" onkeyup="buscarInsumo()" placeholder="Digite o nome do insumo...">
+            </div>
+
+            <!-- Tabela de insumos -->
+            <h2 class="mt-5">Lista de Insumos</h2>
+            <table class="table table-striped" id="tabelaInsumos">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Unidade</th>
+                        <th>Quantidade</th>
+                        <th>Custo</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for insumo in insumos %}
+                    <tr>
+                        <td>{{ insumo.nome }}</td>
+                        <td>{{ insumo.unidade }}</td>
+                        <td>{{ insumo.quantidade }}</td>
+                        <td>R$ {{ insumo.custo|round(2) }}</td>
+                        <td>
+                            <a href="{{ url_for('editar_insumo', id=insumo.id) }}" class="btn btn-primary btn-sm">Editar</a>
+                            <form action="{{ url_for('deletar_insumo', id=insumo.id) }}" method="POST" style="display:inline;">
+                                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Deseja excluir este insumo?')">Excluir</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Modal de criação de insumo -->
+            <div class="modal fade" id="modalInsumo" tabindex="-1" aria-labelledby="modalInsumoLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="modalInsumoLabel">Adicionar Novo Insumo</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form action="{{ url_for('insumos') }}" method="POST">
+                                <div class="mb-3">
+                                    <label for="nome" class="form-label">Nome:</label>
+                                    <input type="text" name="nome" id="nome" class="form-control" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="unidade" class="form-label">Unidade (ex: kg, m, L):</label>
+                                    <input type="text" name="unidade" id="unidade" class="form-control" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="quantidade" class="form-label">Quantidade:</label>
+                                    <input type="number" name="quantidade" id="quantidade" class="form-control" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="custo" class="form-label">Custo Unitário:</label>
+                                    <input type="number" name="custo" id="custo" class="form-control" step="0.01" required>
+                                </div>
+                                <button type="submit" class="btn btn-success">Adicionar Insumo</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+    function buscarInsumo() {
+        var input = document.getElementById("searchInsumo");
+        var filter = input.value.toLowerCase();
+        var table = document.getElementById("tabelaInsumos");
+        var tr = table.getElementsByTagName("tr");
+
+        for (var i = 0; i < tr.length; i++) {
+            var td = tr[i].getElementsByTagName("td")[0]; // Nome do insumo
+            if (td) {
+                var txtValue = td.textContent || td.innerText;
+                tr[i].style.display = txtValue.toLowerCase().indexOf(filter) > -1 ? "" : "none";
+            }
+        }
+    }
+</script>
+
+<style>
+    body {
+        background-color: #f8f9fa;
+    }
+
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 250px;
+        padding-top: 20px;
+        background-color: #343a40;
+        color: #fff;
+    }
+
+    .sidebar .nav-link {
+        font-size: 16px;
+        padding: 15px 20px;
+        margin: 5px 0;
+        border-radius: 10px;
+        transition: background-color 0.3s ease;
+    }
+
+    .sidebar .nav-link.active {
+        background-color: #007bff;
+        color: white;
+    }
+
+    .sidebar .nav-link:hover {
+        background-color: #495057;
+        color: #fff;
+    }
+
+    .sidebar i {
+        font-size: 20px;
+    }
+
+    .btn-lg {
+        border-radius: 1rem;
+    }
+
+    .card-title {
+        font-size: 1.25rem;
+    }
+</style>
+
+{% endblock %}
+
