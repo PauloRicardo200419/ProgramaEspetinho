@@ -1,10 +1,14 @@
-from flask import Flask, render_template, request, session, redirect, url_for, flash
+from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify,send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from datetime import datetime
 import pytz
 from werkzeug.utils import secure_filename
 import os
+import pandas as pd
+from io import BytesIO  # Certifique-se de importar BytesIO
+from sqlalchemy import exc  # Importe para tratar exceções do banco
+
 
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
 
@@ -37,6 +41,16 @@ class Insumo(db.Model):
     unidade = db.Column(db.String(20), nullable=False)
     quantidade = db.Column(db.Float, nullable=False)
     custo = db.Column(db.Float, nullable=False)
+
+class ProdutoInsumo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    produto_id = db.Column(db.Integer, db.ForeignKey('produto.id'), nullable=False)
+    insumo_id = db.Column(db.Integer, db.ForeignKey('insumo.id'), nullable=False)
+    quantidade_necessaria = db.Column(db.Float, nullable=False)
+
+    produto = db.relationship('Produto', backref=db.backref('insumos_associados', cascade='all, delete-orphan'))
+    insumo = db.relationship('Insumo', backref=db.backref('produtos_usando', cascade='all, delete-orphan'))
+
 
 
 class Venda(db.Model):
@@ -72,37 +86,91 @@ def produtos():
             imagem_nome = secure_filename(imagem.filename)
             imagem.save(os.path.join(UPLOAD_FOLDER, imagem_nome))
 
+        # Criar o produto
         novo_produto = Produto(nome=nome, preco=preco, estoque=estoque, imagem=imagem_nome)
         db.session.add(novo_produto)
-        db.session.commit()
+        db.session.commit()  # Salvar o produto primeiro para obter o ID do produto
+
+        # Processar e salvar os insumos
+        insumo_ids = request.form.getlist('insumo_id[]')  # Lista de IDs dos insumos
+        quantidades = request.form.getlist('quantidade_necessaria[]')  # Lista de quantidades
+
+        for insumo_id, quantidade_necessaria in zip(insumo_ids, quantidades):  # Usando quantidade_necessaria
+            insumo = Insumo.query.get(insumo_id)  # Buscar o insumo no banco de dados
+            if insumo:
+                # Criar a associação entre o produto e o insumo
+                produto_insumo = ProdutoInsumo(produto_id=novo_produto.id, insumo_id=insumo.id, quantidade_necessaria=quantidade_necessaria)
+                db.session.add(produto_insumo)
+
+        db.session.commit()  # Salvar a associação dos insumos
+
         return redirect(url_for('produtos'))
 
     produtos = Produto.query.all()
     return render_template('produtos.html', produtos=produtos)
 
+
+
+
 #Editar produto 
 
-@app.route('/editar_produto/<int:id>', methods=['GET', 'POST'])
+@app.route('/produto/<int:id>', methods=['GET', 'POST'])
 def editar_produto(id):
-    produto = Produto.query.get(id)
+    produto = Produto.query.get_or_404(id)
+    insumos = Insumo.query.all()  # Lista todos os insumos disponíveis
+    insumos_associados = ProdutoInsumo.query.filter_by(produto_id=produto.id).all()  # Insumos já associados ao produto
 
     if request.method == 'POST':
-        produto.nome = request.form['nome']
-        produto.preco = float(request.form['preco'])
-        produto.estoque = int(request.form['estoque'])
+        nome = request.form['nome']
+        preco = request.form['preco']
+        estoque = request.form['estoque']
+        
+        # Atualizar as informações do produto
+        produto.nome = nome
+        produto.preco = preco
+        produto.estoque = estoque
 
-        if 'imagem' in request.files:
-            imagem = request.files['imagem']
-            if imagem.filename != '':
-                filename = secure_filename(imagem.filename)
-                caminho = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                imagem.save(caminho)
-                produto.imagem = filename
+        # Remover os insumos associados antigos
+        ProdutoInsumo.query.filter_by(produto_id=produto.id).delete()
+
+        # Adicionar os novos insumos
+        insumos_associados_form = request.form.getlist('insumo_id[]')
+        quantidades = request.form.getlist('quantidade_necessaria[]')
+
+        for i in range(len(insumos_associados_form)):
+            insumo_id = int(insumos_associados_form[i])
+            try:
+                quantidade_necessaria = float(quantidades[i])  # Tenta converter para float primeiro
+                quantidade_necessaria = int(quantidade_necessaria)  # Converte para int, removendo a parte decimal
+            except ValueError:
+                quantidade_necessaria = 0  # Define como 0 caso a conversão falhe
+
+            produto_insumo = ProdutoInsumo(produto_id=produto.id, insumo_id=insumo_id, quantidade_necessaria=quantidade_necessaria)
+            db.session.add(produto_insumo)
 
         db.session.commit()
-        return redirect(url_for('produtos'))
-    
-    return render_template('editar_produto.html', produto=produto)
+        flash('Produto atualizado com sucesso!', 'success')
+        return redirect(url_for('editar_produto', id=produto.id))
+
+    return render_template('editar_produto.html', produto=produto, insumos=insumos, insumos_associados=insumos_associados)
+
+@app.route('/remover_insumo/<int:id>', methods=['POST'])
+def remover_insumo(id):
+    try:
+        assoc = ProdutoInsumo.query.get_or_404(id)
+        produto_id = assoc.produto_id
+        db.session.delete(assoc)
+        db.session.commit()
+        flash('Insumo removido com sucesso!', 'success')
+        return redirect(url_for('editar_produto', id=produto_id))
+    except Exception as e:
+        flash('Erro ao remover insumo.', 'danger')
+        return redirect(request.referrer or url_for('listar_produtos'))
+
+
+
+
+
 
 #Adicionar estoque 
 
@@ -182,168 +250,318 @@ def deletar_insumo(id):
     db.session.commit()
     return redirect(url_for('insumos'))
 
+@app.route('/produto_insumo', methods=['GET', 'POST'])
+def produto_insumo():
+    if request.method == 'POST':
+        produto_id = request.form['produto_id']
+        insumo_id = request.form['insumo_id']
+        quantidade = request.form['quantidade']
+        nova_assoc = ProdutoInsumo(produto_id=produto_id, insumo_id=insumo_id, quantidade_necessaria=quantidade)
+        db.session.add(nova_assoc)
+        db.session.commit()
+        return redirect(url_for('produto_insumo'))
+
+    associacoes = ProdutoInsumo.query.all()
+    produtos = Produto.query.all()
+    insumos = Insumo.query.all()
+    return render_template('produto_insumo.html', associacoes=associacoes, produtos=produtos, insumos=insumos)
+
+@app.route('/deletar_associacao/<int:id>', methods=['POST'])
+def deletar_associacao(id):
+    assoc = ProdutoInsumo.query.get_or_404(id)
+    db.session.delete(assoc)
+    db.session.commit()
+    return redirect(url_for('produto_insumo'))
+
+@app.route('/api/search_insumos', methods=['GET'])
+def search_insumos():
+    query = request.args.get('query', '')
+    if query:
+        # Pesquisa no banco de dados pelo nome do insumo
+        insumos = Insumo.query.filter(Insumo.nome.ilike(f'%{query}%')).all()
+        # Retorna os insumos encontrados em formato JSON
+        return jsonify([{'id': insumo.id, 'nome': insumo.nome} for insumo in insumos])
+    return jsonify([])
+
+
 
 #Venda
 
 @app.route('/venda', methods=['GET', 'POST'])
 def venda():
+    print("[/venda] Rota /venda acessada")
     if 'carrinho' not in session:
         session['carrinho'] = []
+    if 'estoque_reservado' not in session:
+        session['estoque_reservado'] = {}
+
+    observacao_atual = session.get('observacao', '')
 
     if request.method == 'POST':
+        form = request.form
+        print(f"[/venda] FORM DATA: {form}")
+
+        # Atualiza a observação
+        if 'observacao' in form:
+            observacao_atual = form.get('observacao', '').strip()
+            session['observacao'] = observacao_atual
+
         # Remover produto
-        for item in session['carrinho']:
-            if f"remover_{item['produto_id']}" in request.form:
-                produto = Produto.query.get(item['produto_id'])
-                produto.estoque += item['quantidade']  # Reverte a quantidade no estoque
-                db.session.commit()  # Atualiza o estoque no banco
-                session['carrinho'].remove(item)  # Remove o item do carrinho
+        for item in list(session['carrinho']):  # Use list() para iterar em uma cópia
+            if f"remover_{item['produto_id']}" in form:
+                produto_id = item['produto_id']
+                session['carrinho'].remove(item)
+                # Libera o estoque reservado (se houver)
+                if produto_id in session['estoque_reservado']:
+                    session['estoque_reservado'][produto_id] -= item['quantidade']
+                    if session['estoque_reservado'][produto_id] == 0:
+                        del session['estoque_reservado'][produto_id]
                 session.modified = True
                 break
 
         # Atualizar quantidades
-        for item in session['carrinho']:
+        for item in list(session['carrinho']):
             quantidade_key = f"quantidade_{item['produto_id']}"
-            if quantidade_key in request.form:
-                nova_quantidade = int(request.form[quantidade_key])
-                produto = Produto.query.get(item['produto_id'])
+            if quantidade_key in form:
+                try:
+                    nova_quantidade = int(form[quantidade_key])
+                except ValueError:
+                    flash(f"Quantidade inválida para {item['produto']['nome']}.", 'danger')
+                    return redirect(url_for('venda'))
 
-                # Calcular a diferença de estoque entre a quantidade atual e a nova
-                quantidade_atual_no_carrinho = item['quantidade']
+                produto_id = item['produto_id']
+                quantidade_atual = item['quantidade']
+                diferenca = nova_quantidade - quantidade_atual
 
-                # Caso a quantidade tenha aumentado
-                if nova_quantidade > quantidade_atual_no_carrinho:
-                    diferenca = nova_quantidade - quantidade_atual_no_carrinho  # A quantidade aumentou
-                    if produto.estoque < diferenca:
-                        flash(f"Estoque insuficiente para {produto.nome}. Disponível: {produto.estoque}", 'danger')
-                        return redirect(url_for('venda'))
-                    produto.estoque -= diferenca  # Subtrai do estoque
-                # Caso a quantidade tenha diminuído
-                elif nova_quantidade < quantidade_atual_no_carrinho:
-                    diferenca = quantidade_atual_no_carrinho - nova_quantidade  # A quantidade diminuiu
-                    produto.estoque += diferenca  # Adiciona de volta ao estoque
+                produto = Produto.query.get(produto_id)
+                if produto.estoque + session['estoque_reservado'].get(produto_id, 0) < nova_quantidade:
+                    flash(
+                        f"Estoque insuficiente para {produto.nome}. Disponível: {produto.estoque + session['estoque_reservado'].get(produto_id, 0)}",
+                        'danger')
+                    return redirect(url_for('venda'))
 
-                # Atualiza a quantidade no carrinho
                 item['quantidade'] = nova_quantidade
-
-                db.session.commit()  # Atualiza o estoque no banco de dados
+                # Atualiza o estoque reservado
+                if produto_id in session['estoque_reservado']:
+                    session['estoque_reservado'][produto_id] += diferenca
+                else:
+                    session['estoque_reservado'][produto_id] = diferenca
                 session.modified = True
-
-        # Capturar a observação
-        observacao = request.form.get('observacao', '')  # Captura a observação ou usa uma string vazia
-        session['observacao'] = observacao  # Armazenar a observação na sessão
+                break
 
         # Adicionar novo produto
-        if 'produto_id' in request.form:
-            produto_id = int(request.form['produto_id'])
-            quantidade = int(request.form['quantidade'])
-            produto = Produto.query.get(produto_id)
-
-            # Verifica se há estoque suficiente
-            if produto.estoque < quantidade:
-                flash(f"Estoque insuficiente para {produto.nome}. Disponível: {produto.estoque}", 'danger')
+        if 'produto_id' in form and 'quantidade' in form:
+            try:
+                produto_id = int(form['produto_id'])
+                quantidade = int(form['quantidade'])
+            except ValueError:
+                flash("Dados de produto inválidos.", 'danger')
                 return redirect(url_for('venda'))
 
-            # Verifica se o produto já está no carrinho
-            produto_no_carrinho = next((item for item in session['carrinho'] if item['produto_id'] == produto_id), None)
-            if produto_no_carrinho:
-                # Se o produto já estiver no carrinho, atualiza a quantidade
-                produto_no_carrinho['quantidade'] = quantidade
-            else:
-                # Se não, adiciona ao carrinho
-                session['carrinho'].append({'produto_id': produto_id, 'quantidade': quantidade})
+            produto = Produto.query.get(produto_id)
 
-            # Atualiza o estoque do produto no banco
-            produto.estoque -= quantidade
-            db.session.commit()
+            if produto.estoque + session['estoque_reservado'].get(produto_id, 0) < quantidade:
+                flash(
+                    f"Estoque insuficiente para {produto.nome}. Disponível: {produto.estoque + session['estoque_reservado'].get(produto_id, 0)}",
+                    'danger')
+                return redirect(url_for('venda'))
+
+            produto_no_carrinho = next(
+                (item for item in session['carrinho'] if item['produto_id'] == produto_id),
+                None)
+            if produto_no_carrinho:
+                # Se já existe, atualiza a quantidade (soma)
+                produto_no_carrinho['quantidade'] += quantidade
+                # Atualiza o estoque reservado
+                if produto_id in session['estoque_reservado']:
+                    session['estoque_reservado'][produto_id] += quantidade
+                else:
+                    session['estoque_reservado'][produto_id] = quantidade
+            else:
+                session['carrinho'].append(
+                    {'produto_id': produto_id, 'quantidade': quantidade})
+                # Reserva o estoque
+                if produto_id in session['estoque_reservado']:
+                    session['estoque_reservado'][produto_id] += quantidade
+                else:
+                    session['estoque_reservado'][produto_id] = quantidade
+
             session.modified = True
 
-    carrinho = []
+        elif 'produto_id' in form:
+            flash("Quantidade não fornecida.", 'danger')
+            return redirect(url_for('venda'))
+
+    carrinho_exibicao = []
     total = 0
 
-    # Calcula o total e exibe os produtos no carrinho
     for item in session['carrinho']:
         produto = Produto.query.get(item['produto_id'])
-        imagem = produto.imagem if produto.imagem else 'sem-imagem.png'  # Define uma imagem padrão caso não haja imagem do produto
+        imagem = produto.imagem if produto.imagem else 'sem-imagem.png'
         caminho_imagem = url_for('static', filename=f'uploads/{imagem}')
-        
-        carrinho.append({
+        carrinho_exibicao.append({
             'produto': produto,
             'quantidade': item['quantidade'],
-            'imagem': caminho_imagem  # Adiciona o caminho da imagem
+            'imagem': caminho_imagem
         })
         total += produto.preco * item['quantidade']
 
     produtos = Produto.query.all()
 
-    # Passa a observação para o template
-    return render_template('venda.html', produtos=produtos, carrinho=carrinho, total=total, observacao=session.get('observacao', ''))
-
-
-
-
-
-
-
+    # Passa o estoque reservado para o template
+    return render_template('venda.html', produtos=produtos, carrinho=carrinho_exibicao,
+                           total=total,
+                           observacao=observacao_atual,
+                           estoque_reservado=session.get('estoque_reservado', {}))
 
 
 @app.route('/finalizar', methods=['POST'])
 def finalizar():
+    print(request.form)
     carrinho = session.get('carrinho', [])
+    observacao = request.form.get('observacao', '').strip()
     total = 0
-    nova_venda = Venda(total=0)
 
-    # Verificação de estoque antes de registrar a venda
+    if not carrinho:
+        flash("Carrinho vazio. Adicione produtos antes de finalizar.", "warning")
+        return redirect(url_for('venda'))
+
+    # Verificação de estoque ANTES de subtrair
     for item in carrinho:
         produto = Produto.query.get(item['produto_id'])
         quantidade = item['quantidade']
 
-        # Verifica se há estoque suficiente para cada item
-        if produto.estoque < quantidade:
-            # Flash a mensagem de erro e redireciona para a página de venda
-            flash(f"Estoque insuficiente para {produto.nome}. Disponível: {produto.estoque}", "error")
+        if produto is None or produto.estoque < quantidade:
+            flash(
+                f"Estoque insuficiente ou produto não encontrado: {produto.nome if produto else 'Produto Indisponível'}. Disponível: {produto.estoque if produto else 0}",
+                "danger",
+            )
             return redirect(url_for('venda'))
 
         total += produto.preco * quantidade
 
-    # Cria a venda e atualiza o estoque
-    db.session.add(nova_venda)
-    db.session.commit()
+    try:
+        # Cria a venda somente após confirmar que tudo está certo
+        nova_venda = Venda(total=total, observacao=observacao)
+        db.session.add(nova_venda)
+        db.session.commit()
 
-    for item in carrinho:
-        produto = Produto.query.get(item['produto_id'])
-        quantidade = item['quantidade']
+        # Registra os itens e atualiza o estoque
+        for item in carrinho:
+            produto = Produto.query.get(item['produto_id'])
+            quantidade = item['quantidade']
 
-        # Atualiza o estoque do produto
-        produto.estoque -= quantidade
+            produto.estoque -= quantidade
+            item_venda = ItemVenda(
+                venda_id=nova_venda.id,
+                produto_id=produto.id,
+                quantidade=quantidade,
+                preco_unitario=produto.preco,
+            )
+            db.session.add(item_venda)
 
-        # Adiciona o item na venda
-        db.session.add(ItemVenda(venda_id=nova_venda.id, produto_id=produto.id, quantidade=quantidade, preco_unitario=produto.preco))
+        db.session.commit()
 
-    # Atualiza o total da venda
-    nova_venda.total = total
-    db.session.commit()
+        # Limpa a sessão (incluindo o estoque reservado)
+        session.pop('carrinho', None)
+        session.pop('observacao', None)
+        session.pop('estoque_reservado', None)
 
-    # Limpa o carrinho após a venda
-    session.pop('carrinho')
+        flash('Venda finalizada com sucesso!', 'success')
+        return redirect(url_for('historico'))
 
-    return redirect(url_for('historico'))
+    except exc.SQLAlchemyError as e:
+        db.session.rollback()
+        flash(f"Erro ao finalizar a venda: {e}", "danger")
+        return redirect(url_for('venda'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erro inesperado ao finalizar a venda: {e}", "danger")
+        return redirect(url_for('venda'))
+
+        total += produto.preco * quantidade
 
 @app.route('/historico')
 def historico():
+    # Obtenha o fuso horário de São Paulo (que é o mesmo de Franco da Rocha)
+    timezone_sp = pytz.timezone('America/Sao_Paulo')
+    # Obtenha a data atual no fuso horário de São Paulo
+    data_atual_sp = datetime.now(timezone_sp).date().isoformat()
     vendas = Venda.query.order_by(Venda.data.desc()).all()
-    return render_template('historico.html', vendas=vendas)
+    return render_template('historico.html', vendas=vendas, data_atual_sp=data_atual_sp)
 
 @app.route('/venda/<int:id>')
 def detalhes_venda(id):
     venda = Venda.query.get_or_404(id)
     itens = ItemVenda.query.filter_by(venda_id=id).all()
 
-    # Recupera a observação diretamente do objeto venda, se existir no banco
-    observacao = venda.observacao if hasattr(venda, 'observacao') else None
+    # Recupera a observação diretamente do objeto venda
+    observacao = venda.observacao
 
-    return render_template('detalhes_venda.html', venda=venda, itens=itens, observacao=observacao)
+    # Calcula o total da venda
+    total = sum(item.preco_unitario * item.quantidade for item in itens)
 
+    print(f"[/venda/{id}] Total calculado: {total}")  # Log para depuração
+
+    return render_template('detalhes_venda.html', venda=venda, itens=itens, observacao=observacao, total=total)
+
+def obter_vendas_do_banco(filtro_data=None):
+    if filtro_data:
+        # Filtra as vendas pela data
+        return Venda.query.filter_by(data=filtro_data).all()
+    else:
+        # Retorna todas as vendas se não houver filtro
+        return Venda.query.all()
+
+
+@app.route('/gerar_relatorio_periodo')
+def gerar_relatorio_periodo():
+    data_inicio_str = request.args.get('data_inicio')
+    data_fim_str = request.args.get('data_fim')
+    print(f"Período recebido: Início={data_inicio_str}, Fim={data_fim_str}")
+
+    if not data_inicio_str or not data_fim_str:
+        return "Por favor, forneça as datas de início e fim do período."
+
+    try:
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+    except ValueError:
+        return "Formato de data inválido."
+
+    vendas_filtradas = Venda.query.filter(db.func.date(Venda.data) >= data_inicio,
+                                            db.func.date(Venda.data) <= data_fim).order_by(Venda.data).all()
+    print(f"Vendas filtradas para o período: {vendas_filtradas}")
+
+    if not vendas_filtradas:
+        return "Nenhuma venda encontrada para o período especificado."
+
+    # Preparar os dados para o DataFrame
+    dados_relatorio = []
+    for venda in vendas_filtradas:
+        for item in venda.itens:
+            dados_relatorio.append({
+                'ID Venda': venda.id,
+                'Data': venda.data.strftime('%d/%m/%Y %H:%M:%S'),
+                'Produto': item.produto.nome,
+                'Quantidade': item.quantidade,
+                'Preço Unitário': item.preco_unitario,
+                'Total Item': item.quantidade * item.preco_unitario,
+                'Total Venda': venda.total,
+                'Observação': venda.observacao
+            })
+
+    df = pd.DataFrame(dados_relatorio)
+    print("DataFrame criado para o período:")
+    print(df)
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, sheet_name='Vendas', index=False)
+    output.seek(0)
+    print("Arquivo Excel do período gerado em memória.")
+
+    return send_file(output, as_attachment=True, download_name="relatorio_vendas_periodo.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 if __name__ == '__main__':

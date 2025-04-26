@@ -2,27 +2,30 @@
 
 {% block content %}
 <div class="d-flex flex-column flex-md-row">
-    <!-- Sidebar -->
     <nav class="col-md-3 col-lg-2 d-md-block bg-dark text-white sidebar p-4">
         <div class="position-sticky">
             <ul class="nav flex-column">
                 <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'venda' %} active {% endif %}" href="{{ url_for('venda') }}">
+                    <a class="nav-link {% if request.endpoint == 'venda' %} active {% endif %}"
+                       href="{{ url_for('venda') }}">
                         <i class="bi bi-cart"></i> <span class="ms-2">Venda</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'historico' %} active {% endif %}" href="{{ url_for('historico') }}">
+                    <a class="nav-link {% if request.endpoint == 'historico' %} active {% endif %}"
+                       href="{{ url_for('historico') }}">
                         <i class="bi bi-journal-text"></i> <span class="ms-2">Histórico</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'produtos' %} active {% endif %}" href="{{ url_for('produtos') }}">
+                    <a class="nav-link {% if request.endpoint == 'produtos' %} active {% endif %}"
+                       href="{{ url_for('produtos') }}">
                         <i class="bi bi-box"></i> <span class="ms-2">Produtos</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'insumos' %} active {% endif %}" href="{{ url_for('insumos') }}">
+                    <a class="nav-link {% if request.endpoint == 'insumos' %} active {% endif %}"
+                       href="{{ url_for('insumos') }}">
                         <i class="bi bi-box"></i> <span class="ms-2">Insumos</span>
                     </a>
                 </li>
@@ -30,21 +33,20 @@
         </div>
     </nav>
 
-    <!-- Main Content -->
-    <main class="flex-fill p-4" style="margin-left: 250px;">
-        <div class="container">
-            <h1 class="mb-4 text-center text-primary fw-bold">Venda de Produtos</h1>
+    <main class="col-md-9 ms-sm-auto col-lg-10 px-4 main-content">
+        <h1 class="mb-4 text-center text-primary">✏️ Venda de Produtos</h1>
 
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }} text-center">
-                            {{ message }}
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} text-center">
+            {{ message }}
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
 
+        <section class="product-selection">
             <h2 class="mb-3">Escolha um Produto</h2>
             <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 mb-4">
                 {% for produto in produtos %}
@@ -52,16 +54,24 @@
                     <div class="card h-100 text-center shadow-sm border-0 rounded-3">
                         <div class="card-body">
                             {% if produto.imagem %}
-                                <img src="{{ url_for('static', filename='uploads/' + produto.imagem) }}" alt="{{ produto.nome }}" class="img-fluid rounded mb-3" style="max-height: 150px;">
+                            <img src="{{ url_for('static', filename='uploads/' + produto.imagem) }}"
+                                 alt="Imagem do produto {{ produto.nome }}" class="img-fluid rounded mb-3"
+                                 style="max-height: 150px;">
                             {% else %}
-                                <img src="{{ url_for('static', filename='uploads/default_product_image.jpg') }}" alt="Imagem padrão" class="img-fluid rounded mb-3" style="max-height: 150px;">
+                            <img src="{{ url_for('static', filename='uploads/default_product_image.jpg') }}"
+                                 alt="Imagem padrão do produto" class="img-fluid rounded mb-3"
+                                 style="max-height: 150px;">
                             {% endif %}
                             <h5 class="card-title fw-bold">{{ produto.nome }}</h5>
-                            <p class="text-muted">Estoque: {{ produto.estoque }}</p>
+                            {% set reservado = estoque_reservado.get(produto.id, 0) %}
+                            <p class="text-muted">
+                                Disponível: {{ produto.estoque + reservado }}, Reservado: {{ reservado }}
+                            </p>
                             <form action="{{ url_for('venda') }}" method="POST">
                                 <input type="hidden" name="produto_id" value="{{ produto.id }}">
                                 <div class="input-group mb-2">
-                                    <input type="number" name="quantidade" value="1" min="1" class="form-control text-center" required>
+                                    <input type="number" name="quantidade" id="quantidade-{{ produto.id }}" value="1"
+                                           min="1" class="form-control text-center" required>
                                     <button type="submit" class="btn btn-primary">Adicionar</button>
                                 </div>
                             </form>
@@ -70,9 +80,11 @@
                 </div>
                 {% endfor %}
             </div>
+        </section>
 
-            <hr>
+        <hr>
 
+        <section class="shopping-cart">
             <h2 class="mt-4 text-center">Carrinho de Compras</h2>
             <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
                 {% for item in carrinho %}
@@ -80,16 +92,30 @@
                     <div class="card h-100 border-0 shadow-sm rounded-4">
                         <div class="card-body text-center">
                             {% if item.produto.imagem %}
-                                <img src="{{ url_for('static', filename='uploads/' + item.produto.imagem) }}" alt="{{ item.produto.nome }}" class="img-fluid rounded mb-3" style="max-height: 250px;">
+                            <img src="{{ url_for('static', filename='uploads/' + item.produto.imagem) }}"
+                                 alt="Imagem do produto {{ item.produto.nome }}" class="img-fluid rounded mb-3"
+                                 style="max-height: 250px;">
                             {% else %}
-                                <img src="{{ url_for('static', filename='uploads/default_product_image.jpg') }}" alt="Imagem padrão" class="img-fluid rounded mb-3" style="max-height: 250px;">
+                            <img src="{{ url_for('static', filename='uploads/default_product_image.jpg') }}"
+                                 alt="Imagem padrão do produto" class="img-fluid rounded mb-3"
+                                 style="max-height: 250px;">
                             {% endif %}
                             <h5 class="card-title fw-bold">{{ item.produto.nome }}</h5>
                             <p class="text-muted">R$ {{ item.produto.preco|round(2) }}</p>
 
+                            {% set reservado_item = estoque_reservado.get(item.produto.id, 0) %}
+                            <p class="text-info">
+                                Estoque disponível no momento: {{ item.produto.estoque + reservado_item }}
+                            </p>
+
                             <form action="{{ url_for('venda') }}" method="POST" class="mb-2">
                                 <input type="hidden" name="produto_id" value="{{ item.produto.id }}">
-                                <input type="number" name="quantidade" value="{{ item.quantidade }}" class="form-control text-center mx-auto w-50" min="1" onchange="this.form.submit()">
+                                <label for="quantidade-{{ item.produto.id }}" class="form-label visually-hidden">Quantidade
+                                    de {{ item.produto.nome }}</label>
+                                <input type="number" name="quantidade_{{ item.produto.id }}"
+                                       id="quantidade-{{ item.produto.id }}" value="{{ item.quantidade }}"
+                                       class="form-control text-center mx-auto w-50" min="1"
+                                       onchange="this.form.submit()">
                             </form>
 
                             <p class="fw-semibold">Total: R$ {{ (item.produto.preco * item.quantidade)|round(2) }}</p>
@@ -103,43 +129,49 @@
                 </div>
                 {% endfor %}
             </div>
+        </section>
 
+        <section class="checkout-form">
             <form action="{{ url_for('finalizar') }}" method="POST" id="formCarrinho">
                 <div class="mb-3 mt-5">
-                    <label class="form-label">Observação</label>
-                    <textarea name="observacao" class="form-control" rows="3" placeholder="Observações adicionais...">{{ observacao }}</textarea>
+                    <label for="observacao" class="form-label">Observação</label>
+                    <textarea name="observacao" id="observacao" class="form-control" rows="3"
+                              placeholder="Observações adicionais...">{{ observacao|e }}</textarea>
                 </div>
 
                 <h3 class="text-center mt-4 fw-bold">Total: R$ {{ total|round(2) }}</h3>
 
                 {% if carrinho %}
-                    <div class="text-center mt-3">
-                        <button type="button" class="btn btn-success btn-lg px-5" data-bs-toggle="modal" data-bs-target="#modalFinalizar">
-                            Finalizar Venda
-                        </button>
-                    </div>
+                <div class="text-center mt-3">
+                    <button type="button" class="btn btn-success btn-lg px-5" data-bs-toggle="modal"
+                            data-bs-target="#modalFinalizar">
+                        Finalizar Venda
+                    </button>
+                </div>
                 {% endif %}
             </form>
+        </section>
 
-            <div class="modal fade" id="modalFinalizar" tabindex="-1" aria-labelledby="modalFinalizarLabel" aria-hidden="true">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <form action="{{ url_for('finalizar') }}" method="POST">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="modalFinalizarLabel">Finalizar Venda</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                            </div>
-                            <div class="modal-body">
-                                <p>Tem certeza que deseja finalizar a venda?</p>
-                                <p><strong>Total:</strong> R$ {{ total|round(2) }}</p>
-                                <input type="hidden" name="observacao" id="hiddenObservacaoModal" value="{{ observacao }}">
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                <button type="submit" class="btn btn-success">Confirmar</button>
-                            </div>
-                        </form>
-                    </div>
+        <div class="modal fade" id="modalFinalizar" tabindex="-1" aria-labelledby="modalFinalizarLabel"
+             aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form action="{{ url_for('finalizar') }}" method="POST" id="formModalFinalizar">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="modalFinalizarLabel">Finalizar Venda</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                    aria-label="Fechar"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>Tem certeza que deseja finalizar a venda?</p>
+                            <p><strong>Total:</strong> R$ {{ total|round(2) }}</p>
+                            <input type="hidden" name="observacao" id="hiddenObservacaoModal" value="{{ observacao }}">
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-success">Confirmar</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -148,12 +180,14 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        const botaoFinalizar = document.querySelector('[data-bs-target="#modalFinalizar"]');
+        const formCarrinho = document.getElementById('formCarrinho');
         const campoObservacao = document.querySelector('textarea[name="observacao"]');
         const inputHiddenObservacao = document.getElementById('hiddenObservacaoModal');
+        const formModalFinalizar = document.getElementById('formModalFinalizar');
 
-        if (botaoFinalizar && campoObservacao && inputHiddenObservacao) {
-            botaoFinalizar.addEventListener('click', () => {
+
+        if (formCarrinho && campoObservacao && inputHiddenObservacao && formModalFinalizar) {
+            formModalFinalizar.addEventListener('submit', function () {
                 inputHiddenObservacao.value = campoObservacao.value;
             });
         }

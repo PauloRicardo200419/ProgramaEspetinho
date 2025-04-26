@@ -3,7 +3,6 @@
 {% block content %}
 <div class="container-fluid">
     <div class="row">
-        <!-- Sidebar -->
         <nav class="col-md-3 col-lg-2 d-md-block bg-dark text-white sidebar p-4">
             <div class="position-sticky">
                 <ul class="nav flex-column">
@@ -30,42 +29,60 @@
                 </ul>
             </div>
         </nav>
-
+        
         <!-- Main Content -->
-        <main class="col-md-9 ms-sm-auto col-lg-10 px-4">
-            <div class="container mt-4">
-                <h2 class="mb-4 text-center text-primary">📜 Histórico de Vendas</h2>
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-4 main-content">
+            <h1 class="mb-4 text-center text-primary">📜 Histórico de Vendas</h1>
 
-                <!-- Exibição de Total e Quantidade de Vendas -->
                 <div class="mb-4">
                     <h4>Valor Total de Vendas: R$ <span id="totalVendas">{{ vendas | sum(attribute='total') | round(2) }}</span></h4>
                     <h4>Quantidade de Vendas: <span id="quantidadeVendas">{{ vendas | length }}</span></h4>
                 </div>
 
-                <!-- Filtro de Data -->
                 <div class="mb-4">
-                    <label for="filtroData" class="form-label">Filtrar por Data:</label>
-                    <input type="date" id="filtroData" class="form-control" onchange="filtrarPorData()">
+                    <label class="form-label">Gerar Relatório por Período:</label>
+                    <div class="row g-2">
+                        <div class="col-md">
+                            <div class="form-floating">
+                                <input type="date" class="form-control" id="data_inicio" name="data_inicio">
+                                <label for="data_inicio">Data de Início</label>
+                            </div>
+                        </div>
+                        <div class="col-md">
+                            <div class="form-floating">
+                                <input type="date" class="form-control" id="data_fim" name="data_fim">
+                                <label for="data_fim">Data de Fim</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <button class="btn btn-primary" type="button" onclick="gerarRelatorioPeriodo()">Gerar Relatório por Período</button>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="filtroData" class="form-label">Filtrar Vendas por Data:</label>
+                    <input type="date" id="filtroData" class="form-control" onchange="filtrarPorData()" value="{{ data_atual_sp }}">
                 </div>
 
                 {% if vendas %}
                     <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-4" id="vendasLista">
                         {% for venda in vendas %}
-                        <div class="col venda-item" data-data="{{ venda.data.strftime('%Y-%m-%d') }}" data-total="{{ venda.total }}">
-                            <a href="{{ url_for('detalhes_venda', id=venda.id) }}" class="text-decoration-none">
-                                <div class="card shadow-lg border-0 rounded-3 h-100 hover-shadow">
-                                    <div class="card-body">
-                                        <h5 class="card-title text-dark">🧾 Venda #{{ venda.id }}</h5>
-                                        <p class="card-text mb-1">
-                                            <strong>Total:</strong> R$ {{ venda.total|round(2) }}
-                                        </p>
-                                        <p class="card-text text-muted">
-                                            <small>{{ venda.data.strftime('%d/%m/%Y %H:%M') }}</small>
-                                        </p>
+                            <div class="col venda-item" data-data="{{ venda.data.strftime('%Y-%m-%d') }}" data-total="{{ venda.total }}">
+                                <a href="{{ url_for('detalhes_venda', id=venda.id) }}" class="text-decoration-none">
+                                    <div class="card shadow-lg border-0 rounded-3 h-100 hover-shadow">
+                                        <div class="card-body">
+                                            <h5 class="card-title text-dark">🧾 Venda #{{ venda.id }}</h5>
+                                            <p class="card-text mb-1">
+                                                <strong>Total:</strong> R$ {{ venda.total|round(2) }}
+                                            </p>
+                                            <p class="card-text text-muted">
+                                                <small>{{ venda.data.strftime('%d/%m/%Y %H:%M') }}</small>
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
-                            </a>
-                        </div>
+                                </a>
+                            </div>
                         {% endfor %}
                     </div>
                 {% else %}
@@ -78,7 +95,75 @@
     </div>
 </div>
 
-<!-- Adicionando estilos customizados para melhorar a responsividade -->
+<script>
+
+    function gerarRelatorioPeriodo() {
+        var dataInicio = document.getElementById("data_inicio").value;
+        var dataFim = document.getElementById("data_fim").value;
+
+        if (!dataInicio || !dataFim) {
+            alert("Por favor, selecione as datas de início e fim do período.");
+            return;
+        }
+
+        fetch(`/gerar_relatorio_periodo?data_inicio=${dataInicio}&data_fim=${dataFim}`, {
+            method: 'GET'
+        })
+        .then(response => response.blob())
+        .then(blob => {
+            var url = window.URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'relatorio_vendas_periodo.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+        })
+        .catch(error => {
+            console.error('Erro ao gerar o relatório por período:', error);
+        });
+    }
+
+    // Função para filtrar as vendas por data (para exibição na tela)
+    function filtrarPorData() {
+        var inputData = document.getElementById("filtroData");
+        var filtroData = inputData.value;
+        var cards = document.querySelectorAll(".venda-item");
+        var totalVendas = 0;
+        var quantidadeVendas = 0;
+        var vendasFiltradas = 0;
+
+        for (var i = 0; i < cards.length; i++) {
+            var card = cards[i];
+            var dataVenda = card.getAttribute("data-data");
+
+            if (filtroData === dataVenda || filtroData === "") {
+                card.style.display = "block";
+                var vendaTotal = parseFloat(card.getAttribute("data-total"));
+                totalVendas += vendaTotal;
+                quantidadeVendas++;
+                vendasFiltradas++;
+            } else {
+                card.style.display = "none";
+            }
+        }
+
+        document.getElementById("totalVendas").textContent = totalVendas.toFixed(2);
+        document.getElementById("quantidadeVendas").textContent = quantidadeVendas;
+
+        if (vendasFiltradas === 0) {
+            document.getElementById("totalVendas").textContent = "0.00";
+            document.getElementById("quantidadeVendas").textContent = "0";
+        }
+    }
+
+    // Chamar a função filtrarPorData() no window.onload
+    window.onload = function() {
+        filtrarPorData();
+    };
+</script>
+
 <style>
     /* Sidebar */
     .sidebar {
@@ -154,52 +239,5 @@
         }
     }
 </style>
-
-<!-- Script para filtrar as vendas por data e atualizar valores de total e quantidade -->
-<script>
-    // Função para filtrar as vendas por data
-    function filtrarPorData() {
-        var inputData = document.getElementById("filtroData");
-        var filtroData = inputData.value;
-        var cards = document.querySelectorAll(".venda-item");
-        var totalVendas = 0;
-        var quantidadeVendas = 0;
-        var vendasFiltradas = 0;
-
-        // Iterar sobre as vendas para aplicar o filtro de data
-        for (var i = 0; i < cards.length; i++) {
-            var card = cards[i];
-            var dataVenda = card.getAttribute("data-data");
-
-            if (filtroData === dataVenda || filtroData === "") {
-                card.style.display = "block";  // Exibe o card da venda
-                var vendaTotal = parseFloat(card.getAttribute("data-total")); // Acessa o valor do total da venda diretamente do atributo data-total
-                totalVendas += vendaTotal;
-                quantidadeVendas++;
-                vendasFiltradas++;
-            } else {
-                card.style.display = "none";  // Oculta o card da venda
-            }
-        }
-
-        // Atualizar os valores de total e quantidade
-        document.getElementById("totalVendas").textContent = totalVendas.toFixed(2);
-        document.getElementById("quantidadeVendas").textContent = quantidadeVendas;
-
-        // Se não houver vendas para a data filtrada, zerar os valores
-        if (vendasFiltradas === 0) {
-            document.getElementById("totalVendas").textContent = "0.00";
-            document.getElementById("quantidadeVendas").textContent = "0";
-        }
-    }
-
-    // Preencher automaticamente com a data atual ao carregar a página
-    window.onload = function() {
-        var hoje = new Date();
-        var dataAtual = hoje.toISOString().split('T')[0]; // Obtém a data no formato YYYY-MM-DD
-        document.getElementById("filtroData").value = dataAtual;
-        filtrarPorData(); // Aplica o filtro automaticamente
-    };
-</script>
 
 {% endblock %}

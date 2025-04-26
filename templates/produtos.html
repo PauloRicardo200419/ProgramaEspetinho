@@ -33,7 +33,7 @@
 
         <!-- Main Content -->
         <main class="col-md-9 ms-sm-auto col-lg-10 px-4 main-content">
-            <h1 class="mb-4 text-center text-primary">Gestão de Produtos</h1>
+            <h1 class="mb-4 text-center text-primary">📝 Gestão de Produtos</h1>
 
             <!-- Botão para abrir o modal de criação de produto -->
             <button id="btnAdicionarProduto" class="btn btn-success mb-3" data-bs-toggle="modal" data-bs-target="#modalProduto">
@@ -93,49 +93,126 @@
                         </div>
                         <div class="modal-body">
                             <form action="{{ url_for('produtos') }}" method="POST" enctype="multipart/form-data">
+                                <!-- Dados do Produto -->
                                 <div class="mb-3">
                                     <label for="nome" class="form-label">Nome:</label>
                                     <input type="text" id="nome" name="nome" class="form-control" required>
                                 </div>
+            
                                 <div class="mb-3">
                                     <label for="preco" class="form-label">Preço:</label>
                                     <input type="text" id="preco" name="preco" class="form-control" required>
                                 </div>
+            
                                 <div class="mb-3">
                                     <label for="estoque" class="form-label">Estoque:</label>
                                     <input type="text" id="estoque" name="estoque" class="form-control" required>
                                 </div>
+            
                                 <div class="mb-3">
                                     <label for="imagem" class="form-label">Imagem do Produto:</label>
                                     <input type="file" id="imagem" name="imagem" class="form-control" accept="image/*">
                                 </div>
-                                <button type="submit" class="btn btn-success">Adicionar Produto</button>
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            
+                                <!-- Insumos -->
+                                <div class="mb-3">
+                                    <label for="insumo-search" class="form-label">Adicionar Insumo</label>
+                                    <input type="text" class="form-control" id="insumo-search" placeholder="Pesquise insumos..." autocomplete="off" />
+                                    <ul id="insumo-results" class="list-group mt-2"></ul>
+                                </div>
+            
+                                <div class="mb-3">
+                                    <table class="table table-bordered" id="insumos-table">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Insumo</th>
+                                                <th>Quantidade Necessária</th>
+                                                <th>Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Insumos adicionados serão listados aqui -->
+                                        </tbody>
+                                    </table>
+                                </div>
+            
+                                <!-- Campo oculto para enviar insumos -->
+                                <input type="hidden" name="insumo_id[]" id="insumo_id" value="">
+                                <input type="hidden" name="quantidade_necessaria[]" id="quantidade_necessaria" value="">
+            
+                                <!-- Botões do Modal -->
+                                <div class="d-flex justify-content-end mt-3">
+                                    <button type="submit" class="btn btn-success me-2">Adicionar Produto</button>
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                </div>
                             </form>
                         </div>
                     </div>
                 </div>
             </div>
-        </main>
-    </div>
-</div>
-
-<script>
-    function buscarProduto() {
-        var input = document.getElementById("search");
-        var filter = input.value.toLowerCase();
-        var table = document.getElementById("tabelaProdutos");
-        var tr = table.getElementsByTagName("tr");
-
-        for (var i = 0; i < tr.length; i++) {
-            var td = tr[i].getElementsByTagName("td")[1]; // nome do produto (segunda coluna)
-            if (td) {
-                var txtValue = td.textContent || td.innerText;
-                tr[i].style.display = txtValue.toLowerCase().indexOf(filter) > -1 ? "" : "none";
-            }
-        }
-    }
-</script>
+            
+            <!-- Scripts -->
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    const insumoSearchInput = document.getElementById('insumo-search');
+                    const insumoResultsList = document.getElementById('insumo-results');
+                    const insumosTableBody = document.querySelector('#insumos-table tbody');
+                    const insumoIdsInput = document.getElementById('insumo_id');
+                    const quantidadeNecessariaInput = document.getElementById('quantidade_necessaria');
+            
+                    // Função para buscar insumos
+                    insumoSearchInput.addEventListener('input', function () {
+                        const query = insumoSearchInput.value.trim();
+                        if (query.length > 1) {
+                            fetch(`/api/search_insumos?query=${encodeURIComponent(query)}`)
+                                .then(res => res.json())
+                                .then(data => {
+                                    insumoResultsList.innerHTML = '';
+                                    data.forEach(insumo => {
+                                        const li = document.createElement('li');
+                                        li.classList.add('list-group-item');
+                                        li.textContent = insumo.nome;
+                                        li.dataset.id = insumo.id;
+                                        li.addEventListener('click', () => {
+                                            addInsumo(insumo.id, insumo.nome);
+                                            insumoSearchInput.value = '';
+                                            insumoResultsList.innerHTML = '';
+                                        });
+                                        insumoResultsList.appendChild(li);
+                                    });
+                                });
+                        } else {
+                            insumoResultsList.innerHTML = '';
+                        }
+                    });
+            
+                    // Função para adicionar insumo na tabela
+                    function addInsumo(insumoId, insumoNome) {
+                        const row = document.createElement('tr');
+            
+                        row.innerHTML = `
+                        <td>${insumoNome}</td>
+                        <td>
+                            <input type="number" name="quantidade_necessaria[]" class="form-control" required />
+                            <input type="hidden" name="insumo_id[]" value="${insumoId}" />
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-danger btn-sm remover-insumo">Remover</button>
+                        </td>
+                        `;
+            
+                        // Adicionar evento de remoção ao insumo
+                        row.querySelector('.remover-insumo').addEventListener('click', () => {
+                            row.remove();
+                        });
+            
+                        insumosTableBody.appendChild(row);
+                    }
+                });
+            </script>
+            
+            
+            
 
 <style>
     .sidebar {
