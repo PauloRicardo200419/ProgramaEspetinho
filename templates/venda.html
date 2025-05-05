@@ -1,255 +1,193 @@
-{% extends 'base.html' %}
-
-{% block content %}
-<div class="d-flex flex-column flex-md-row">
-    <nav class="col-md-3 col-lg-2 d-md-block bg-dark text-white sidebar p-4">
-        <div class="position-sticky">
-            <ul class="nav flex-column">
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'venda' %} active {% endif %}"
-                       href="{{ url_for('venda') }}">
-                        <i class="bi bi-cart"></i> <span class="ms-2">Venda</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'historico' %} active {% endif %}"
-                       href="{{ url_for('historico') }}">
-                        <i class="bi bi-journal-text"></i> <span class="ms-2">Histórico</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'produtos' %} active {% endif %}"
-                       href="{{ url_for('produtos') }}">
-                        <i class="bi bi-box"></i> <span class="ms-2">Produtos</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'insumos' %} active {% endif %}"
-                       href="{{ url_for('insumos') }}">
-                        <i class="bi bi-box"></i> <span class="ms-2">Insumos</span>
-                    </a>
-                </li>
-            </ul>
-        </div>
-    </nav>
-
-    <main class="col-md-9 ms-sm-auto col-lg-10 px-4 main-content">
-        <h1 class="mb-4 text-center text-primary">✏️ Venda de Produtos</h1>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <div class="alert alert-{{ category }} text-center">
-            {{ message }}
-        </div>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
-
-        <section class="product-selection">
-            <h2 class="mb-3">Escolha um Produto</h2>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 mb-4">
-                {% for produto in produtos %}
-                <div class="col">
-                    <div class="card h-100 text-center shadow-sm border-0 rounded-3">
-                        <div class="card-body">
-                            {% if produto.imagem %}
-                            <img src="{{ url_for('static', filename='uploads/' + produto.imagem) }}"
-                                 alt="Imagem do produto {{ produto.nome }}" class="img-fluid rounded mb-3"
-                                 style="max-height: 150px;">
-                            {% else %}
-                            <img src="{{ url_for('static', filename='uploads/default_product_image.jpg') }}"
-                                 alt="Imagem padrão do produto" class="img-fluid rounded mb-3"
-                                 style="max-height: 150px;">
-                            {% endif %}
-                            <h5 class="card-title fw-bold">{{ produto.nome }}</h5>
-                            {% set reservado = estoque_reservado.get(produto.id, 0) %}
-                            <p class="text-muted">
-                                Disponível: {{ produto.estoque + reservado }}, Reservado: {{ reservado }}
-                            </p>
-                            <form action="{{ url_for('venda') }}" method="POST">
-                                <input type="hidden" name="produto_id" value="{{ produto.id }}">
-                                <div class="input-group mb-2">
-                                    <input type="number" name="quantidade" id="quantidade-{{ produto.id }}" value="1"
-                                           min="1" class="form-control text-center" required>
-                                    <button type="submit" class="btn btn-primary">Adicionar</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </section>
-
-        <hr>
-
-        <section class="shopping-cart">
-            <h2 class="mt-4 text-center">Carrinho de Compras</h2>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-                {% for item in carrinho %}
-                <div class="col">
-                    <div class="card h-100 border-0 shadow-sm rounded-4">
-                        <div class="card-body text-center">
-                            {% if item.produto.imagem %}
-                            <img src="{{ url_for('static', filename='uploads/' + item.produto.imagem) }}"
-                                 alt="Imagem do produto {{ item.produto.nome }}" class="img-fluid rounded mb-3"
-                                 style="max-height: 250px;">
-                            {% else %}
-                            <img src="{{ url_for('static', filename='uploads/default_product_image.jpg') }}"
-                                 alt="Imagem padrão do produto" class="img-fluid rounded mb-3"
-                                 style="max-height: 250px;">
-                            {% endif %}
-                            <h5 class="card-title fw-bold">{{ item.produto.nome }}</h5>
-                            <p class="text-muted">R$ {{ item.produto.preco|round(2) }}</p>
-
-                            {% set reservado_item = estoque_reservado.get(item.produto.id, 0) %}
-                            <p class="text-info">
-                                Estoque disponível no momento: {{ item.produto.estoque + reservado_item }}
-                            </p>
-
-                            <form action="{{ url_for('venda') }}" method="POST" class="mb-2">
-                                <input type="hidden" name="produto_id" value="{{ item.produto.id }}">
-                                <label for="quantidade-{{ item.produto.id }}" class="form-label visually-hidden">Quantidade
-                                    de {{ item.produto.nome }}</label>
-                                <input type="number" name="quantidade_{{ item.produto.id }}"
-                                       id="quantidade-{{ item.produto.id }}" value="{{ item.quantidade }}"
-                                       class="form-control text-center mx-auto w-50" min="1"
-                                       onchange="this.form.submit()">
-                            </form>
-
-                            <p class="fw-semibold">Total: R$ {{ (item.produto.preco * item.quantidade)|round(2) }}</p>
-
-                            <form action="{{ url_for('venda') }}" method="POST">
-                                <input type="hidden" name="remover_{{ item.produto.id }}" value="1">
-                                <button type="submit" class="btn btn-outline-danger w-100">Remover</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </section>
-
-        <section class="checkout-form">
-            <form action="{{ url_for('finalizar') }}" method="POST" id="formCarrinho">
-                <div class="mb-3 mt-5">
-                    <label for="observacao" class="form-label">Observação</label>
-                    <textarea name="observacao" id="observacao" class="form-control" rows="3"
-                              placeholder="Observações adicionais...">{{ observacao|e }}</textarea>
-                </div>
-
-                <h3 class="text-center mt-4 fw-bold">Total: R$ {{ total|round(2) }}</h3>
-
-                {% if carrinho %}
-                <div class="text-center mt-3">
-                    <button type="button" class="btn btn-success btn-lg px-5" data-bs-toggle="modal"
-                            data-bs-target="#modalFinalizar">
-                        Finalizar Venda
-                    </button>
-                </div>
-                {% endif %}
-            </form>
-        </section>
-
-        <div class="modal fade" id="modalFinalizar" tabindex="-1" aria-labelledby="modalFinalizarLabel"
-             aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <form action="{{ url_for('finalizar') }}" method="POST" id="formModalFinalizar">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="modalFinalizarLabel">Finalizar Venda</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                    aria-label="Fechar"></button>
-                        </div>
-                        <div class="modal-body">
-                            <p>Tem certeza que deseja finalizar a venda?</p>
-                            <p><strong>Total:</strong> R$ {{ total|round(2) }}</p>
-                            <input type="hidden" name="observacao" id="hiddenObservacaoModal" value="{{ observacao }}">
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                            <button type="submit" class="btn btn-success">Confirmar</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </main>
-</div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const formCarrinho = document.getElementById('formCarrinho');
-        const campoObservacao = document.querySelector('textarea[name="observacao"]');
-        const inputHiddenObservacao = document.getElementById('hiddenObservacaoModal');
-        const formModalFinalizar = document.getElementById('formModalFinalizar');
-
-
-        if (formCarrinho && campoObservacao && inputHiddenObservacao && formModalFinalizar) {
-            formModalFinalizar.addEventListener('submit', function () {
-                inputHiddenObservacao.value = campoObservacao.value;
-            });
-        }
-    });
-</script>
-
-<style>
-    body {
-        background-color: #f8f9fa;
-    }
-
-    .sidebar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        height: 100vh;
-        width: 250px;
-        padding-top: 20px;
-        background-color: #343a40;
-        color: #fff;
-        border-right: 1px solid #dee2e6;
-    }
-
-    .sidebar .nav-link {
-        font-size: 16px;
-        padding: 15px 20px;
-        margin: 5px 0;
-        border-radius: 10px;
-        transition: background-color 0.3s ease;
-    }
-
-    .sidebar .nav-link.active {
-        background-color: #007bff;
-        color: white;
-    }
-
-    .sidebar .nav-link:hover {
-        background-color: #495057;
-        color: #fff;
-    }
-
-    .sidebar i {
-        font-size: 20px;
-    }
-
-    .btn-lg {
-        border-radius: 1rem;
-    }
-
-    .card-title {
-        font-size: 1.25rem;
-    }
-
-    @media (max-width: 768px) {
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tela de Vendas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
         .sidebar {
-            width: 100%;
-            height: auto;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 250px;
+            padding-top: 20px;
+            background-color: #343a40;
+            color: #fff;
         }
+    
+        .sidebar .nav-link {
+            font-size: 16px;
+            padding: 15px 20px;
+            margin: 5px 0;
+            border-radius: 10px;
+            transition: background-color 0.3s ease;
+        }
+    
+        .sidebar .nav-link.active {
+            background-color: #007bff;
+            color: white;
+        }
+    
+        .sidebar .nav-link:hover {
+            background-color: #495057;
+            color: #fff;
+        }
+    
+        .sidebar i {
+            font-size: 20px;
+        }
+    
+        .main-content {
+            padding-left: 260px;
+            padding-top: 20px;
+        }
+    
+        .card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+    
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+    
+        .hover-shadow:hover {
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+    
+        .text-primary {
+            color: #007bff !important;
+        }
+    
+        @media (max-width: 768px) {
+            .sidebar {
+                position: static;
+                width: 100%;
+                height: auto;
+                padding: 20px 0;
+            }
+    
+            .main-content {
+                padding-left: 0;
+            }
+    
+            .card {
+                margin-bottom: 20px;
+            }
+    
+            .main-content h1 {
+                font-size: 24px;
+                text-align: center;
+            }
+    
+            .sidebar .nav-link {
+                font-size: 14px;
+                padding: 12px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block bg-dark text-white sidebar p-4">
+                <div class="position-sticky">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'venda' %} active {% endif %}" href="{{ url_for('venda') }}">
+                                <i class="bi bi-cart"></i> <span class="ms-2">Venda</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'historico' %} active {% endif %}" href="{{ url_for('historico') }}">
+                                <i class="bi bi-journal-text"></i> <span class="ms-2">Histórico</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'produtos' %} active {% endif %}" href="{{ url_for('produtos') }}">
+                                <i class="bi bi-box"></i> <span class="ms-2">Produtos</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'insumos' %} active {% endif %}" href="{{ url_for('insumos') }}">
+                                <i class="bi bi-box"></i> <span class="ms-2">Insumos</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
 
-        main {
-            margin-left: 0;
-        }
-    }
-</style>
-{% endblock %}
+            <!-- Main Content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-4 main-content">
+                <h1 class="mb-4 text-center text-primary">📝 Gestão de Produtos</h1>
+
+                <!-- Tela de Vendas -->
+                <h2 class="text-center">Venda de Produtos</h2>
+                <form method="POST">
+                    <div class="row">
+                        {% for produto in produtos %}
+                            <div class="col-md-4 col-sm-6 produto-card">
+                                <div class="card hover-shadow">
+                                    <img class="card-img-top produto-img" src="{{ url_for('static', filename='uploads/' + produto.imagem) }}" alt="{{ produto.nome }}">
+                                    <div class="card-body">
+                                        <h5 class="card-title">{{ produto.nome }}</h5>
+                                        <p class="card-text">Preço: R$ {{ produto.preco }}</p>
+                                        <p class="card-text">
+                                            Estoque Atual: {{ produto.estoque }} |
+                                            Reservado: {{ estoque_reservado.get(produto.id, 0) }} |
+                                            Disponível: {{ produto.estoque - estoque_reservado.get(produto.id, 0) }}
+                                        </p>
+                                        <input type="number" name="quantidade" class="form-control" placeholder="Quantidade" min="1" max="{{ produto.estoque - estoque_reservado.get(produto.id, 0) }}">
+                                        <input type="hidden" name="produto_id" value="{{ produto.id }}">
+                                        <button type="submit" class="btn btn-primary mt-2 w-100">Adicionar ao Carrinho</button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </form>
+
+                <h3 class="mt-5">Carrinho de Compras</h3>
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Produto</th>
+                            <th>Quantidade</th>
+                            <th>Preço Unitário</th>
+                            <th>Total</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in carrinho %}
+                            <tr>
+                                <td>{{ item.produto.nome }}</td>
+                                <td>{{ item.quantidade }}</td>
+                                <td>R$ {{ item.produto.preco }}</td>
+                                <td>R$ {{ item.produto.preco * item.quantidade }}</td>
+                                <td>
+                                    <form method="POST" class="d-inline">
+                                        <button type="submit" class="btn btn-danger" name="remover_{{ item.produto.id }}">Remover</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <h4>Total: R$ {{ total }}</h4>
+
+                <!-- Finalizar Venda -->
+                <form method="POST" action="{{ url_for('finalizar') }}">
+                    <textarea name="observacao" class="form-control" placeholder="Digite observações..." rows="3"></textarea>
+                    <button type="submit" class="btn btn-success mt-2 w-100">Finalizar Venda</button>
+                </form>
+            </main>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

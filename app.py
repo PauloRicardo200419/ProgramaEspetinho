@@ -289,197 +289,184 @@ def search_insumos():
 
 @app.route('/venda', methods=['GET', 'POST'])
 def venda():
-    print("[/venda] Rota /venda acessada")
-    if 'carrinho' not in session:
-        session['carrinho'] = []
-    if 'estoque_reservado' not in session:
-        session['estoque_reservado'] = {}
+    print("[/venda] Acessando rota de venda.")
 
-    observacao_atual = session.get('observacao', '')
+    # Inicializa as variáveis de sessão, caso não existam
+    session.setdefault('carrinho', [])
+    session.setdefault('estoque_reservado', {})
 
     if request.method == 'POST':
         form = request.form
-        print(f"[/venda] FORM DATA: {form}")
+        print(f"Formulário recebido: {form}")
 
-        # Atualiza a observação
-        if 'observacao' in form:
-            observacao_atual = form.get('observacao', '').strip()
-            session['observacao'] = observacao_atual
+        # Pega as listas de produto_id e quantidade
+        produto_ids = form.getlist('produto_id')  # Pega todos os produto_id
+        quantidades = form.getlist('quantidade')  # Pega todas as quantidades
 
-        # Remover produto
-        for item in list(session['carrinho']):  # Use list() para iterar em uma cópia
-            if f"remover_{item['produto_id']}" in form:
-                produto_id = item['produto_id']
-                session['carrinho'].remove(item)
-                # Libera o estoque reservado (se houver)
-                if produto_id in session['estoque_reservado']:
-                    session['estoque_reservado'][produto_id] -= item['quantidade']
-                    if session['estoque_reservado'][produto_id] == 0:
-                        del session['estoque_reservado'][produto_id]
+        # Verifica se o produto_id e quantidade estão presentes
+        if produto_ids and quantidades:
+            for produto_id, quantidade in zip(produto_ids, quantidades):
+                produto_id = produto_id.strip()
+                quantidade = quantidade.strip()
+
+                # Verifica se o produto_id e quantidade são válidos
+                if produto_id and quantidade:
+                    try:
+                        produto_id = int(produto_id)
+                        quantidade = int(quantidade)
+                    except ValueError:
+                        flash("Valor inválido para produto ou quantidade.", "danger")
+                        return redirect(url_for('venda'))
+
+                    # Força os tipos de session['estoque_reservado'] para garantir consistência
+                    session['estoque_reservado'] = {int(k): int(v) for k, v in session['estoque_reservado'].items()}
+
+                    produto = Produto.query.get(produto_id)
+
+                    if produto:
+                        # Verifica o estoque disponível considerando o estoque reservado
+                        estoque_reservado_atual = session['estoque_reservado'].get(produto_id, 0)
+                        estoque_disponivel = produto.estoque - estoque_reservado_atual
+                        if quantidade > estoque_disponivel:
+                            flash(f"Estoque insuficiente para {produto.nome}.", "danger")
+                            return redirect(url_for('venda'))
+
+                        # Atualiza o carrinho
+                        produto_existente = next(
+                            (item for item in session['carrinho'] if item['produto_id'] == produto_id),
+                            None
+                        )
+
+                        if produto_existente:
+                            # Se o produto já existir no carrinho, atualiza a quantidade
+                            produto_existente['quantidade'] += quantidade
+                            # Atualiza o estoque reservado, somando à quantidade já reservada
+                            session['estoque_reservado'][produto_id] += quantidade
+                        else:
+                            # Caso contrário, adiciona o produto ao carrinho
+                            session['carrinho'].append({'produto_id': produto_id, 'quantidade': quantidade})
+                            # Atualiza o estoque reservado pela quantidade do novo produto adicionado
+                            session['estoque_reservado'][produto_id] = quantidade
+
+                        session.modified = True
+
+                    else:
+                        flash("Produto não encontrado.", "danger")
+                else:
+                    flash("Por favor, preencha todos os campos.", "danger")
+
+        # Remover produto do carrinho
+        remover_id_str = next(
+            (key.replace('remover_', '') for key in form if key.startswith('remover_')), None
+        )
+        if remover_id_str:
+            remover_id = int(remover_id_str)
+
+            # Captura quantidade antes de remover
+            item_removido = next(
+                (item for item in session['carrinho'] if item['produto_id'] == remover_id),
+                None
+            )
+            if item_removido:
+                quantidade_removida = item_removido['quantidade']
+
+                # Remove do carrinho
+                session['carrinho'] = [
+                    item for item in session['carrinho'] if item['produto_id'] != remover_id
+                ]
+
+                # Atualiza estoque reservado (removendo)
+                if remover_id in session['estoque_reservado']:
+                    session['estoque_reservado'][remover_id] -= quantidade_removida
+                    if session['estoque_reservado'][remover_id] <= 0:
+                        del session['estoque_reservado'][remover_id]
+
                 session.modified = True
-                break
 
-        # Atualizar quantidades
-        for item in list(session['carrinho']):
-            quantidade_key = f"quantidade_{item['produto_id']}"
-            if quantidade_key in form:
-                try:
-                    nova_quantidade = int(form[quantidade_key])
-                except ValueError:
-                    flash(f"Quantidade inválida para {item['produto']['nome']}.", 'danger')
-                    return redirect(url_for('venda'))
-
-                produto_id = item['produto_id']
-                quantidade_atual = item['quantidade']
-                diferenca = nova_quantidade - quantidade_atual
-
-                produto = Produto.query.get(produto_id)
-                if produto.estoque + session['estoque_reservado'].get(produto_id, 0) < nova_quantidade:
-                    flash(
-                        f"Estoque insuficiente para {produto.nome}. Disponível: {produto.estoque + session['estoque_reservado'].get(produto_id, 0)}",
-                        'danger')
-                    return redirect(url_for('venda'))
-
-                item['quantidade'] = nova_quantidade
-                # Atualiza o estoque reservado
-                if produto_id in session['estoque_reservado']:
-                    session['estoque_reservado'][produto_id] += diferenca
-                else:
-                    session['estoque_reservado'][produto_id] = diferenca
-                session.modified = True
-                break
-
-        # Adicionar novo produto
-        if 'produto_id' in form and 'quantidade' in form:
-            try:
-                produto_id = int(form['produto_id'])
-                quantidade = int(form['quantidade'])
-            except ValueError:
-                flash("Dados de produto inválidos.", 'danger')
-                return redirect(url_for('venda'))
-
-            produto = Produto.query.get(produto_id)
-
-            if produto.estoque + session['estoque_reservado'].get(produto_id, 0) < quantidade:
-                flash(
-                    f"Estoque insuficiente para {produto.nome}. Disponível: {produto.estoque + session['estoque_reservado'].get(produto_id, 0)}",
-                    'danger')
-                return redirect(url_for('venda'))
-
-            produto_no_carrinho = next(
-                (item for item in session['carrinho'] if item['produto_id'] == produto_id),
-                None)
-            if produto_no_carrinho:
-                # Se já existe, atualiza a quantidade (soma)
-                produto_no_carrinho['quantidade'] += quantidade
-                # Atualiza o estoque reservado
-                if produto_id in session['estoque_reservado']:
-                    session['estoque_reservado'][produto_id] += quantidade
-                else:
-                    session['estoque_reservado'][produto_id] = quantidade
-            else:
-                session['carrinho'].append(
-                    {'produto_id': produto_id, 'quantidade': quantidade})
-                # Reserva o estoque
-                if produto_id in session['estoque_reservado']:
-                    session['estoque_reservado'][produto_id] += quantidade
-                else:
-                    session['estoque_reservado'][produto_id] = quantidade
-
-            session.modified = True
-
-        elif 'produto_id' in form:
-            flash("Quantidade não fornecida.", 'danger')
             return redirect(url_for('venda'))
 
+    # Exibir carrinho e produtos
     carrinho_exibicao = []
     total = 0
-
     for item in session['carrinho']:
-        produto = Produto.query.get(item['produto_id'])
-        imagem = produto.imagem if produto.imagem else 'sem-imagem.png'
-        caminho_imagem = url_for('static', filename=f'uploads/{imagem}')
-        carrinho_exibicao.append({
-            'produto': produto,
-            'quantidade': item['quantidade'],
-            'imagem': caminho_imagem
-        })
-        total += produto.preco * item['quantidade']
+        produto_id = item['produto_id']
+        produto = Produto.query.get(produto_id)
+        if produto:
+            imagem = produto.imagem if produto.imagem else 'sem-imagem.png'
+            caminho_imagem = url_for('static', filename=f'uploads/{imagem}')
+            carrinho_exibicao.append({
+                'produto': produto,
+                'quantidade': item['quantidade'],
+                'imagem': caminho_imagem
+            })
+            total += produto.preco * item['quantidade']
 
     produtos = Produto.query.all()
 
-    # Passa o estoque reservado para o template
-    return render_template('venda.html', produtos=produtos, carrinho=carrinho_exibicao,
-                           total=total,
-                           observacao=observacao_atual,
-                           estoque_reservado=session.get('estoque_reservado', {}))
+    return render_template(
+        'venda.html',
+        produtos=produtos,
+        carrinho=carrinho_exibicao,
+        total=total,
+        estoque_reservado=session.get('estoque_reservado', {})
+    )
+
+
+
+
+
+
+
+
+
 
 
 @app.route('/finalizar', methods=['POST'])
 def finalizar():
-    print(request.form)
-    carrinho = session.get('carrinho', [])
-    observacao = request.form.get('observacao', '').strip()
-    total = 0
+    print("[/finalizar] Finalizando a venda...")
 
+    carrinho = session.get('carrinho', [])
     if not carrinho:
         flash("Carrinho vazio. Adicione produtos antes de finalizar.", "warning")
         return redirect(url_for('venda'))
 
-    # Verificação de estoque ANTES de subtrair
+    # Captura o total da venda
+    total = sum([
+        item['quantidade'] * Produto.query.get(item['produto_id']).preco
+        for item in carrinho
+    ])
+
+    # Captura as observações do formulário
+    observacao = request.form.get('observacao')  # <-- Captura aqui
+    print(f"Observação recebida: {observacao}")
+
+    # Cria nova venda com observações
+    nova_venda = Venda(total=total, observacao=observacao)  # <-- Usa aqui
+    db.session.add(nova_venda)
+    db.session.flush()  # Garante que nova_venda.id esteja disponível
+
     for item in carrinho:
         produto = Produto.query.get(item['produto_id'])
-        quantidade = item['quantidade']
+        produto.estoque -= item['quantidade']
 
-        if produto is None or produto.estoque < quantidade:
-            flash(
-                f"Estoque insuficiente ou produto não encontrado: {produto.nome if produto else 'Produto Indisponível'}. Disponível: {produto.estoque if produto else 0}",
-                "danger",
-            )
-            return redirect(url_for('venda'))
+        item_venda = ItemVenda(
+            venda_id=nova_venda.id,
+            produto_id=produto.id,
+            quantidade=item['quantidade'],
+            preco_unitario=produto.preco
+        )
+        db.session.add(item_venda)
 
-        total += produto.preco * quantidade
+    db.session.commit()
 
-    try:
-        # Cria a venda somente após confirmar que tudo está certo
-        nova_venda = Venda(total=total, observacao=observacao)
-        db.session.add(nova_venda)
-        db.session.commit()
+    # Limpa o carrinho e o estoque reservado
+    session.pop('carrinho', None)
+    session.pop('estoque_reservado', None)
 
-        # Registra os itens e atualiza o estoque
-        for item in carrinho:
-            produto = Produto.query.get(item['produto_id'])
-            quantidade = item['quantidade']
+    flash('Venda finalizada com sucesso!', 'success')
+    return redirect(url_for('venda'))
 
-            produto.estoque -= quantidade
-            item_venda = ItemVenda(
-                venda_id=nova_venda.id,
-                produto_id=produto.id,
-                quantidade=quantidade,
-                preco_unitario=produto.preco,
-            )
-            db.session.add(item_venda)
 
-        db.session.commit()
-
-        # Limpa a sessão (incluindo o estoque reservado)
-        session.pop('carrinho', None)
-        session.pop('observacao', None)
-        session.pop('estoque_reservado', None)
-
-        flash('Venda finalizada com sucesso!', 'success')
-        return redirect(url_for('historico'))
-
-    except exc.SQLAlchemyError as e:
-        db.session.rollback()
-        flash(f"Erro ao finalizar a venda: {e}", "danger")
-        return redirect(url_for('venda'))
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Erro inesperado ao finalizar a venda: {e}", "danger")
-        return redirect(url_for('venda'))
-
-        total += produto.preco * quantidade
 
 @app.route('/historico')
 def historico():
