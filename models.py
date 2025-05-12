@@ -8,7 +8,29 @@ class Produto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
     preco = db.Column(db.Float, nullable=False)
-    estoque = db.Column(db.Integer, nullable=False)
+    imagem = db.Column(db.String(255))
+    itens_venda = db.relationship('ItemVenda', back_populates='produto')
+
+    @property
+    def estoque_dinamico(self):
+        """
+        Calcula o estoque disponível com base nos insumos associados.
+        Retorna o menor número de produtos que podem ser feitos com os insumos disponíveis.
+        """
+        if not self.insumos_associados:
+            return 0  # Retorna 0 se não houver insumos associados
+
+        estoque_possivel = float('inf')  # Começa com um valor muito alto
+        for produto_insumo in self.insumos_associados:
+            insumo = produto_insumo.insumo
+            if insumo.quantidade > 0:
+                # Calcula quantos produtos podem ser feitos com o insumo disponível
+                estoque_com_insumo = insumo.quantidade // produto_insumo.quantidade_necessaria
+                estoque_possivel = min(estoque_possivel, estoque_com_insumo)
+            else:
+                return 0  # Se algum insumo estiver zerado, o estoque é 0
+
+        return int(estoque_possivel)
 
 class Insumo(db.Model):
     id = db.Column(db.Integer, primary_key=True)

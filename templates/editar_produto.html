@@ -22,134 +22,109 @@
   </style>
 </head>
 <body>
-  <div class="container mt-5">
-    <h2 class="mb-4">Editar Produto</h2>
-    <form method="POST">
-      <!-- Dados do Produto -->
-      <div class="mb-3">
-        <label for="nome" class="form-label">Nome do Produto</label>
-        <input type="text" class="form-control" name="nome" id="nome" value="{{ produto.nome }}" required />
-      </div>
-
-      <div class="mb-3">
-        <label for="preco" class="form-label">Preço</label>
-        <input type="number" class="form-control" name="preco" id="preco" value="{{ produto.preco }}" required />
-      </div>
-
-      <div class="mb-3">
-        <label for="estoque" class="form-label">Estoque</label>
-        <input type="number" class="form-control" name="estoque" id="estoque" value="{{ produto.estoque }}" required />
-      </div>
-
-      <!-- Insumos -->
-      <div class="d-flex mb-3">
-        <div class="w-100">
-          <label for="insumo-search" class="form-label">Adicionar Insumo</label>
-          <input type="text" class="form-control" id="insumo-search" placeholder="Pesquise insumos..." autocomplete="off" />
-          <ul id="insumo-results" class="list-group mt-2"></ul>
+  <div class="container mt-4">
+    <h1>Editar Produto</h1>
+    <form action="{{ url_for('editar_produto', id=produto.id) }}" method="POST">
+        <div class="mb-3">
+            <label for="nome" class="form-label">Nome do Produto:</label>
+            <input type="text" id="nome" name="nome" class="form-control" value="{{ produto.nome }}" required>
         </div>
-        <div class="d-flex align-items-center ms-3" style="width: 200px; margin-top: 22px;"> <!-- Ajuste de margem -->
-          <button type="button" class="btn btn-primary w-100" id="add-insumo">Adicionar Insumo</button>
+        <div class="mb-3">
+            <label for="preco" class="form-label">Preço:</label>
+            <input type="number" step="0.01" id="preco" name="preco" class="form-control" value="{{ produto.preco }}" required>
         </div>
-      </div>
-      
-      
-      
-      
-      
+        <div class="mb-3">
+            <label for="imagem" class="form-label">Alterar Imagem do Produto:</label>
+            <input type="file" id="imagem" name="imagem" class="form-control" accept="image/*">
+        </div>
 
-      <!-- Tabela de Insumos -->
-      <table class="table table-bordered" id="insumos-table">
-        <thead class="table-light">
-          <tr>
-            <th>Insumo</th>
-            <th>Quantidade Necessária</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for assoc in insumos_associados %}
-          <tr>
-            <td>{{ assoc.insumo.nome }}</td>
-            <td>
-              <input type="number" name="quantidade_necessaria[]" class="form-control" value="{{ assoc.quantidade_necessaria }}" required />
-              <input type="hidden" name="insumo_id[]" value="{{ assoc.insumo.id }}" />
-            </td>
-            <td>
-                <form method="POST" action="{{ url_for('remover_insumo', id=assoc.id) }}" onsubmit="return confirm('Deseja realmente remover este insumo?');">
-                  <button type="submit" class="btn btn-danger btn-sm">Remover</button>
-                </form>
-            </td>              
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+        <!-- Insumos Associados -->
+        <h5>Insumos Associados</h5>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Insumo</th>
+                    <th>Quantidade Necessária</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for assoc in insumos_associados %}
+                <tr>
+                    <td>{{ assoc.insumo.nome }}</td>
+                    <td>{{ assoc.quantidade_necessaria }}</td>
+                    <td>
+                        <form action="{{ url_for('remover_insumo', id=assoc.id) }}" method="POST" style="display:inline;">
+                            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Tem certeza que deseja remover este insumo?')">Remover</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
 
-      <!-- Botões Fixos -->
-    <div class="fixed-bottom bg-white border-top py-3 px-4 d-flex justify-content-end">
-        <a href="{{ url_for('produtos') }}" class="btn btn-secondary me-2">Voltar</a>
-        <a href="{{ url_for('produtos') }}" class="btn btn-danger me-2">Cancelar</a>
-        <button type="submit" class="btn btn-success">Salvar Produto</button>
-    </div>
-  
+        <!-- Adicionar Novo Insumo -->
+        <h5>Adicionar Novo Insumo</h5>
+        <div id="insumos-container">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="insumo_id_0" class="form-label">Insumo:</label>
+                    <select id="insumo_id_0" name="insumo_id[]" class="form-select">
+                        <option value="">Selecione um insumo</option>
+                        {% for insumo in insumos %}
+                        <option value="{{ insumo.id }}">{{ insumo.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="quantidade_necessaria_0" class="form-label">Quantidade Necessária:</label>
+                    <input type="number" step="0.01" id="quantidade_necessaria_0" name="quantidade_necessaria[]" class="form-control">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-success" onclick="adicionarInsumo()">+</button>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+        <a href="{{ url_for('produtos') }}" class="btn btn-secondary">Voltar</a>
     </form>
   </div>
 
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      const insumoSearchInput = document.getElementById('insumo-search');
-      const insumoResultsList = document.getElementById('insumo-results');
-      const insumosTableBody = document.querySelector('#insumos-table tbody');
+    let insumoIndex = 1;
 
-      insumoSearchInput.addEventListener('input', function () {
-        const query = insumoSearchInput.value.trim();
-        if (query.length > 1) {
-          fetch(`/api/search_insumos?query=${encodeURIComponent(query)}`)
-            .then(res => res.json())
-            .then(data => {
-              insumoResultsList.innerHTML = '';
-              data.forEach(insumo => {
-                const li = document.createElement('li');
-                li.classList.add('list-group-item');
-                li.textContent = insumo.nome;
-                li.dataset.id = insumo.id;
-                li.addEventListener('click', () => {
-                  addInsumo(insumo.id, insumo.nome);
-                  insumoSearchInput.value = '';
-                  insumoResultsList.innerHTML = '';
-                });
-                insumoResultsList.appendChild(li);
-              });
-            });
-        } else {
-          insumoResultsList.innerHTML = '';
-        }
-      });
-
-      function addInsumo(insumoId, insumoNome) {
-        const row = document.createElement('tr');
-
+    function adicionarInsumo() {
+        const container = document.getElementById('insumos-container');
+        const row = document.createElement('div');
+        row.className = 'row mb-3';
         row.innerHTML = `
-          <td>${insumoNome}</td>
-          <td>
-            <input type="number" name="quantidade_necessaria[]" class="form-control" required />
-            <input type="hidden" name="insumo_id[]" value="${insumoId}" />
-          </td>
-          <td>
-            <button type="button" class="btn btn-danger btn-sm remover-insumo">Remover</button>
-          </td>
+            <div class="col-md-6">
+                <label for="insumo_id_${insumoIndex}" class="form-label">Insumo:</label>
+                <select id="insumo_id_${insumoIndex}" name="insumo_id[]" class="form-select">
+                    <option value="">Selecione um insumo</option>
+                    {% for insumo in insumos %}
+                    <option value="{{ insumo.id }}">{{ insumo.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="quantidade_necessaria_${insumoIndex}" class="form-label">Quantidade Necessária:</label>
+                <input type="number" step="0.01" id="quantidade_necessaria_${insumoIndex}" name="quantidade_necessaria[]" class="form-control">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="button" class="btn btn-danger" onclick="removerInsumo(this)">-</button>
+            </div>
         `;
+        container.appendChild(row);
+        insumoIndex++;
+    }
 
-        // Adicionar evento ao botão de remoção
-        row.querySelector('.remover-insumo').addEventListener('click', () => {
-          row.remove();
-        });
-
-        insumosTableBody.appendChild(row);
-      }
-    });
+    function removerInsumo(button) {
+        button.parentElement.parentElement.remove();
+    }
   </script>
 </body>
 </html>

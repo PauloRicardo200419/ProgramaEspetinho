@@ -20,8 +20,13 @@ datetime.now(timezone)
 
 
 app = Flask(__name__)
-UPLOAD_FOLDER = os.path.join('static', 'uploads')
+UPLOAD_FOLDER = 'static/uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Cria o diretório de uploads se ele não existir
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
 app.secret_key = 'laucher1'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 db = SQLAlchemy(app)
@@ -31,9 +36,29 @@ class Produto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
     preco = db.Column(db.Float, nullable=False)
-    estoque = db.Column(db.Integer, default=0)
     imagem = db.Column(db.String(255))
     itens_venda = db.relationship('ItemVenda', back_populates='produto')
+
+    @property
+    def estoque_dinamico(self):
+        """
+        Calcula o estoque disponível com base nos insumos associados.
+        Retorna o menor número de produtos que podem ser feitos com os insumos disponíveis.
+        """
+        if not self.insumos_associados:
+            return 0  # Retorna 0 se não houver insumos associados
+
+        estoque_possivel = float('inf')  # Começa com um valor muito alto
+        for produto_insumo in self.insumos_associados:
+            insumo = produto_insumo.insumo
+            if insumo.quantidade > 0:
+                # Calcula quantos produtos podem ser feitos com o insumo disponível
+                estoque_com_insumo = insumo.quantidade // produto_insumo.quantidade_necessaria
+                estoque_possivel = min(estoque_possivel, estoque_com_insumo)
+            else:
+                return 0  # Se algum insumo estiver zerado, o estoque é 0
+
+        return int(estoque_possivel)
 
 class Insumo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -76,38 +101,44 @@ def index():
 @app.route('/produtos', methods=['GET', 'POST'])
 def produtos():
     if request.method == 'POST':
-        nome = request.form['nome']
-        preco = request.form['preco']
-        estoque = request.form['estoque']
+        nome = request.form.get('nome')
+        preco = request.form.get('preco')
         imagem = request.files.get('imagem')
 
+        # Salvar a imagem no diretório de uploads
         imagem_nome = None
-        if imagem and imagem.filename != '':
+        if imagem:
             imagem_nome = secure_filename(imagem.filename)
-            imagem.save(os.path.join(UPLOAD_FOLDER, imagem_nome))
+            imagem.save(os.path.join(app.config['UPLOAD_FOLDER'], imagem_nome))
 
-        # Criar o produto
-        novo_produto = Produto(nome=nome, preco=preco, estoque=estoque, imagem=imagem_nome)
+        # Criar o novo produto
+        novo_produto = Produto(
+            nome=nome,
+            preco=float(preco),
+            imagem=imagem_nome
+        )
         db.session.add(novo_produto)
-        db.session.commit()  # Salvar o produto primeiro para obter o ID do produto
+        db.session.flush()  # Garante que o ID do produto esteja disponível
 
-        # Processar e salvar os insumos
-        insumo_ids = request.form.getlist('insumo_id[]')  # Lista de IDs dos insumos
-        quantidades = request.form.getlist('quantidade_necessaria[]')  # Lista de quantidades
+        # Adicionar insumos associados
+        insumos_associados_form = request.form.getlist('insumo_id[]')
+        quantidades = request.form.getlist('quantidade_necessaria[]')
 
-        for insumo_id, quantidade_necessaria in zip(insumo_ids, quantidades):  # Usando quantidade_necessaria
-            insumo = Insumo.query.get(insumo_id)  # Buscar o insumo no banco de dados
-            if insumo:
-                # Criar a associação entre o produto e o insumo
-                produto_insumo = ProdutoInsumo(produto_id=novo_produto.id, insumo_id=insumo.id, quantidade_necessaria=quantidade_necessaria)
+        for i in range(len(insumos_associados_form)):
+            if insumos_associados_form[i] and quantidades[i]:
+                insumo_id = int(insumos_associados_form[i])
+                quantidade_necessaria = float(quantidades[i])
+                produto_insumo = ProdutoInsumo(produto_id=novo_produto.id, insumo_id=insumo_id, quantidade_necessaria=quantidade_necessaria)
                 db.session.add(produto_insumo)
 
-        db.session.commit()  # Salvar a associação dos insumos
+        db.session.commit()
 
+        flash('Produto adicionado com sucesso!', 'success')
         return redirect(url_for('produtos'))
 
     produtos = Produto.query.all()
-    return render_template('produtos.html', produtos=produtos)
+    insumos = Insumo.query.all()
+    return render_template('produtos.html', produtos=produtos, insumos=insumos)
 
 
 
@@ -117,36 +148,41 @@ def produtos():
 @app.route('/produto/<int:id>', methods=['GET', 'POST'])
 def editar_produto(id):
     produto = Produto.query.get_or_404(id)
-    insumos = Insumo.query.all()  # Lista todos os insumos disponíveis
-    insumos_associados = ProdutoInsumo.query.filter_by(produto_id=produto.id).all()  # Insumos já associados ao produto
+    insumos = Insumo.query.all()
+    insumos_associados = ProdutoInsumo.query.filter_by(produto_id=produto.id).all()
 
     if request.method == 'POST':
         nome = request.form['nome']
         preco = request.form['preco']
-        estoque = request.form['estoque']
-        
+        imagem = request.files.get('imagem')
+
         # Atualizar as informações do produto
         produto.nome = nome
-        produto.preco = preco
-        produto.estoque = estoque
+        produto.preco = float(preco)
 
-        # Remover os insumos associados antigos
-        ProdutoInsumo.query.filter_by(produto_id=produto.id).delete()
+        # Atualizar a imagem, se fornecida
+        if imagem:
+            imagem_nome = secure_filename(imagem.filename)
+            imagem.save(os.path.join(app.config['UPLOAD_FOLDER'], imagem_nome))
+            produto.imagem = imagem_nome
 
-        # Adicionar os novos insumos
+        # Atualizar ou adicionar os insumos associados
         insumos_associados_form = request.form.getlist('insumo_id[]')
         quantidades = request.form.getlist('quantidade_necessaria[]')
 
         for i in range(len(insumos_associados_form)):
-            insumo_id = int(insumos_associados_form[i])
-            try:
-                quantidade_necessaria = float(quantidades[i])  # Tenta converter para float primeiro
-                quantidade_necessaria = int(quantidade_necessaria)  # Converte para int, removendo a parte decimal
-            except ValueError:
-                quantidade_necessaria = 0  # Define como 0 caso a conversão falhe
+            if insumos_associados_form[i] and quantidades[i]:  # Verifica se os valores não estão vazios
+                insumo_id = int(insumos_associados_form[i])
+                quantidade_necessaria = float(quantidades[i])
 
-            produto_insumo = ProdutoInsumo(produto_id=produto.id, insumo_id=insumo_id, quantidade_necessaria=quantidade_necessaria)
-            db.session.add(produto_insumo)
+                # Verifica se a associação já existe
+                assoc = ProdutoInsumo.query.filter_by(produto_id=produto.id, insumo_id=insumo_id).first()
+                if assoc:
+                    assoc.quantidade_necessaria = quantidade_necessaria  # Atualiza a quantidade
+                else:
+                    # Cria uma nova associação
+                    produto_insumo = ProdutoInsumo(produto_id=produto.id, insumo_id=insumo_id, quantidade_necessaria=quantidade_necessaria)
+                    db.session.add(produto_insumo)
 
         db.session.commit()
         flash('Produto atualizado com sucesso!', 'success')
@@ -156,6 +192,7 @@ def editar_produto(id):
 
 @app.route('/remover_insumo/<int:id>', methods=['POST'])
 def remover_insumo(id):
+    print(f"ID recebido para remoção: {id}")  # Log para depuração
     try:
         assoc = ProdutoInsumo.query.get_or_404(id)
         produto_id = assoc.produto_id
@@ -164,8 +201,9 @@ def remover_insumo(id):
         flash('Insumo removido com sucesso!', 'success')
         return redirect(url_for('editar_produto', id=produto_id))
     except Exception as e:
-        flash('Erro ao remover insumo.', 'danger')
-        return redirect(request.referrer or url_for('listar_produtos'))
+        print(f"Erro ao remover insumo: {e}")  # Log do erro
+        flash(f'Erro ao remover insumo: {str(e)}', 'danger')
+        return redirect(request.referrer or url_for('produtos'))
 
 
 
@@ -289,106 +327,11 @@ def search_insumos():
 
 @app.route('/venda', methods=['GET', 'POST'])
 def venda():
-    print("[/venda] Acessando rota de venda.")
-
-    # Inicializa as variáveis de sessão, caso não existam
-    session.setdefault('carrinho', [])
-    session.setdefault('estoque_reservado', {})
-
-    if request.method == 'POST':
-        form = request.form
-        print(f"Formulário recebido: {form}")
-
-        # Pega as listas de produto_id e quantidade
-        produto_ids = form.getlist('produto_id')  # Pega todos os produto_id
-        quantidades = form.getlist('quantidade')  # Pega todas as quantidades
-
-        # Verifica se o produto_id e quantidade estão presentes
-        if produto_ids and quantidades:
-            for produto_id, quantidade in zip(produto_ids, quantidades):
-                produto_id = produto_id.strip()
-                quantidade = quantidade.strip()
-
-                # Verifica se o produto_id e quantidade são válidos
-                if produto_id and quantidade:
-                    try:
-                        produto_id = int(produto_id)
-                        quantidade = int(quantidade)
-                    except ValueError:
-                        flash("Valor inválido para produto ou quantidade.", "danger")
-                        return redirect(url_for('venda'))
-
-                    # Força os tipos de session['estoque_reservado'] para garantir consistência
-                    session['estoque_reservado'] = {int(k): int(v) for k, v in session['estoque_reservado'].items()}
-
-                    produto = Produto.query.get(produto_id)
-
-                    if produto:
-                        # Verifica o estoque disponível considerando o estoque reservado
-                        estoque_reservado_atual = session['estoque_reservado'].get(produto_id, 0)
-                        estoque_disponivel = produto.estoque - estoque_reservado_atual
-                        if quantidade > estoque_disponivel:
-                            flash(f"Estoque insuficiente para {produto.nome}.", "danger")
-                            return redirect(url_for('venda'))
-
-                        # Atualiza o carrinho
-                        produto_existente = next(
-                            (item for item in session['carrinho'] if item['produto_id'] == produto_id),
-                            None
-                        )
-
-                        if produto_existente:
-                            # Se o produto já existir no carrinho, atualiza a quantidade
-                            produto_existente['quantidade'] += quantidade
-                            # Atualiza o estoque reservado, somando à quantidade já reservada
-                            session['estoque_reservado'][produto_id] += quantidade
-                        else:
-                            # Caso contrário, adiciona o produto ao carrinho
-                            session['carrinho'].append({'produto_id': produto_id, 'quantidade': quantidade})
-                            # Atualiza o estoque reservado pela quantidade do novo produto adicionado
-                            session['estoque_reservado'][produto_id] = quantidade
-
-                        session.modified = True
-
-                    else:
-                        flash("Produto não encontrado.", "danger")
-                else:
-                    flash("Por favor, preencha todos os campos.", "danger")
-
-        # Remover produto do carrinho
-        remover_id_str = next(
-            (key.replace('remover_', '') for key in form if key.startswith('remover_')), None
-        )
-        if remover_id_str:
-            remover_id = int(remover_id_str)
-
-            # Captura quantidade antes de remover
-            item_removido = next(
-                (item for item in session['carrinho'] if item['produto_id'] == remover_id),
-                None
-            )
-            if item_removido:
-                quantidade_removida = item_removido['quantidade']
-
-                # Remove do carrinho
-                session['carrinho'] = [
-                    item for item in session['carrinho'] if item['produto_id'] != remover_id
-                ]
-
-                # Atualiza estoque reservado (removendo)
-                if remover_id in session['estoque_reservado']:
-                    session['estoque_reservado'][remover_id] -= quantidade_removida
-                    if session['estoque_reservado'][remover_id] <= 0:
-                        del session['estoque_reservado'][remover_id]
-
-                session.modified = True
-
-            return redirect(url_for('venda'))
-
-    # Exibir carrinho e produtos
+    produtos = Produto.query.all()
     carrinho_exibicao = []
     total = 0
-    for item in session['carrinho']:
+
+    for item in session.get('carrinho', []):
         produto_id = item['produto_id']
         produto = Produto.query.get(produto_id)
         if produto:
@@ -401,8 +344,6 @@ def venda():
             })
             total += produto.preco * item['quantidade']
 
-    produtos = Produto.query.all()
-
     return render_template(
         'venda.html',
         produtos=produtos,
@@ -412,13 +353,79 @@ def venda():
     )
 
 
+@app.route('/adicionar_ao_carrinho', methods=['POST'])
+def adicionar_ao_carrinho():
+    produto_id = request.form.get('produto_id')
+    quantidade = request.form.get('quantidade')
+
+    if not produto_id or not quantidade:
+        flash('Produto ou quantidade inválida.', 'danger')
+        return redirect(url_for('venda'))
+
+    try:
+        produto_id = int(produto_id)
+        quantidade = int(quantidade)
+    except ValueError:
+        flash('Produto ou quantidade inválida.', 'danger')
+        return redirect(url_for('venda'))
+
+    if quantidade <= 0:
+        flash('A quantidade deve ser maior que zero.', 'warning')
+        return redirect(url_for('venda'))
+
+    produto = Produto.query.get(produto_id)
+    if not produto:
+        flash('Produto não encontrado.', 'danger')
+        return redirect(url_for('venda'))
+
+    estoque_disponivel = produto.estoque_dinamico - session.get('estoque_reservado', {}).get(produto_id, 0)
+    if quantidade > estoque_disponivel:
+        flash(f'Estoque insuficiente para {produto.nome}.', 'danger')
+        return redirect(url_for('venda'))
+
+    # Adicionar ao carrinho
+    carrinho = session.get('carrinho', [])
+    for item in carrinho:
+        if item['produto_id'] == produto_id:
+            item['quantidade'] += quantidade
+            break
+    else:
+        carrinho.append({'produto_id': produto_id, 'quantidade': quantidade})
+
+    # Atualizar o estoque reservado
+    estoque_reservado = session.get('estoque_reservado', {})
+    estoque_reservado[produto_id] = estoque_reservado.get(produto_id, 0) + quantidade
+
+    session['carrinho'] = carrinho
+    session['estoque_reservado'] = estoque_reservado
+    session.modified = True
+
+    flash(f'{quantidade} unidade(s) de {produto.nome} adicionada(s) ao carrinho.', 'success')
+    return redirect(url_for('venda'))
 
 
+@app.route('/remover_item', methods=['POST'])
+def remover_item():
+    produto_id = request.form.get('produto_id')
+    if not produto_id:
+        flash('ID do produto não fornecido.', 'danger')
+        return redirect(url_for('venda'))
 
+    produto_id = int(produto_id)
+    carrinho = session.get('carrinho', [])
 
+    # Remove o item do carrinho
+    session['carrinho'] = [item for item in carrinho if item['produto_id'] != produto_id]
 
+    # Atualiza o estoque reservado
+    estoque_reservado = session.get('estoque_reservado', {})
+    if produto_id in estoque_reservado:
+        del estoque_reservado[produto_id]
+    session['estoque_reservado'] = estoque_reservado
 
-
+    session.modified = True
+    flash('Item removido do carrinho.', 'success')
+    return redirect(url_for('venda'))
 
 
 @app.route('/finalizar', methods=['POST'])
@@ -430,42 +437,29 @@ def finalizar():
         flash("Carrinho vazio. Adicione produtos antes de finalizar.", "warning")
         return redirect(url_for('venda'))
 
-    # Captura o total da venda
-    total = sum([
-        item['quantidade'] * Produto.query.get(item['produto_id']).preco
-        for item in carrinho
-    ])
-
-    # Captura as observações do formulário
-    observacao = request.form.get('observacao')  # <-- Captura aqui
-    print(f"Observação recebida: {observacao}")
-
-    # Cria nova venda com observações
-    nova_venda = Venda(total=total, observacao=observacao)  # <-- Usa aqui
-    db.session.add(nova_venda)
-    db.session.flush()  # Garante que nova_venda.id esteja disponível
-
+    total = 0
     for item in carrinho:
         produto = Produto.query.get(item['produto_id'])
-        produto.estoque -= item['quantidade']
+        quantidade_vendida = item['quantidade']
+        total += produto.preco * quantidade_vendida
 
-        item_venda = ItemVenda(
-            venda_id=nova_venda.id,
-            produto_id=produto.id,
-            quantidade=item['quantidade'],
-            preco_unitario=produto.preco
-        )
-        db.session.add(item_venda)
+        for produto_insumo in produto.insumos_associados:
+            insumo = produto_insumo.insumo
+            quantidade_necessaria = produto_insumo.quantidade_necessaria * quantidade_vendida
+            if insumo.quantidade < quantidade_necessaria:
+                flash(f"Insumo insuficiente para {produto.nome}.", "danger")
+                return redirect(url_for('venda'))
+            insumo.quantidade -= quantidade_necessaria
 
+    nova_venda = Venda(total=total, observacao=request.form.get('observacao'))
+    db.session.add(nova_venda)
     db.session.commit()
 
-    # Limpa o carrinho e o estoque reservado
     session.pop('carrinho', None)
     session.pop('estoque_reservado', None)
 
     flash('Venda finalizada com sucesso!', 'success')
     return redirect(url_for('venda'))
-
 
 
 @app.route('/historico')

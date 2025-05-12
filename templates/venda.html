@@ -5,95 +5,153 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tela de Vendas</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
+        body {
+            background-color: #f8f9fa;
+        }
+
         .sidebar {
             position: fixed;
             top: 0;
-            left: 0;
+            left: -250px; /* Escondida por padrão */
             height: 100vh;
             width: 250px;
             padding-top: 20px;
-            background-color: #343a40;
+            background-color: #212529;
             color: #fff;
+            transition: left 0.3s ease;
+            z-index: 1050; /* Garantir que fique acima do conteúdo */
         }
-    
+
+        .sidebar.open {
+            left: 0; /* Mostra a sidebar */
+        }
+
         .sidebar .nav-link {
             font-size: 16px;
             padding: 15px 20px;
             margin: 5px 0;
             border-radius: 10px;
             transition: background-color 0.3s ease;
-        }
-    
-        .sidebar .nav-link.active {
-            background-color: #007bff;
-            color: white;
-        }
-    
-        .sidebar .nav-link:hover {
-            background-color: #495057;
             color: #fff;
         }
-    
+
+        .sidebar .nav-link.active {
+            background-color: #0d6efd;
+            color: white;
+        }
+
+        .sidebar .nav-link:hover {
+            background-color: #343a40;
+            color: #fff;
+        }
+
         .sidebar i {
             font-size: 20px;
         }
-    
+
+        .toggle-sidebar-btn {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            z-index: 1100; /* Garantir que o botão fique acima da sidebar */
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .toggle-sidebar-btn.open {
+            left: 260px; /* Ajuste para posicionar o botão à direita da sidebar */
+            transition: left 0.3s ease;
+        }
+
         .main-content {
-            padding-left: 260px;
+            padding-left: 20px;
             padding-top: 20px;
+            transition: margin-left 0.3s ease;
         }
-    
-        .card {
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+
+        .main-content.shifted {
+            margin-left: 250px; /* Ajusta o conteúdo quando a sidebar está aberta */
         }
-    
-        .card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        }
-    
-        .hover-shadow:hover {
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-        }
-    
-        .text-primary {
-            color: #007bff !important;
-        }
-    
+
         @media (max-width: 768px) {
-            .sidebar {
-                position: static;
-                width: 100%;
-                height: auto;
-                padding: 20px 0;
-            }
-    
             .main-content {
+                margin-left: 0;
                 padding-left: 0;
             }
-    
-            .card {
-                margin-bottom: 20px;
+
+            .main-content.shifted {
+                margin-left: 0;
             }
-    
-            .main-content h1 {
-                font-size: 24px;
-                text-align: center;
+
+            .toggle-sidebar-btn {
+                top: 10px;
+                left: 10px;
             }
-    
-            .sidebar .nav-link {
-                font-size: 14px;
-                padding: 12px 15px;
+        }
+
+        .produto-card {
+            max-width: 250px; /* Define uma largura fixa para os cards */
+            margin: 0; /* Remove margens extras */
+        }
+
+        .produto-img {
+            width: 100%; /* Ajusta a largura para ocupar todo o espaço do card */
+            height: 150px; /* Define uma altura fixa */
+            object-fit: cover; /* Garante que a imagem seja cortada proporcionalmente para caber no espaço */
+            border-radius: 5px; /* Adiciona bordas arredondadas */
+        }
+
+        .card {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Adiciona uma sombra leve */
+            border: none; /* Remove a borda padrão */
+            transition: transform 0.2s ease, box-shadow 0.2s ease; /* Transição suave */
+        }
+
+        .card:hover {
+            transform: translateY(-5px); /* Eleva o card ao passar o mouse */
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2); /* Aumenta a sombra ao passar o mouse */
+        }
+
+        .row.g-0 {
+            gap: 3px; /* Define um espaçamento máximo de 3px entre os cards */
+        }
+
+        @media (min-width: 1200px) {
+            .row.g-4 {
+                gap: 20px; /* Espaçamento maior para telas grandes */
             }
+        }
+
+        .btn-quantidade {
+            width: 50px; /* Define uma largura maior */
+            height: 50px; /* Define uma altura maior */
+            font-size: 1.5rem; /* Aumenta o tamanho do texto */
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
     </style>
 </head>
 <body>
+    <!-- Botão para abrir/fechar a sidebar -->
+    <button class="toggle-sidebar-btn" id="toggleSidebar">
+        <i class="bi bi-list"></i>
+    </button>
+
     <div class="container-fluid">
         <div class="row">
             <!-- Sidebar -->
-            <nav class="col-md-3 col-lg-2 d-md-block bg-dark text-white sidebar p-4">
+            <nav class="sidebar" id="sidebar">
                 <div class="position-sticky">
                     <ul class="nav flex-column">
                         <li class="nav-item">
@@ -121,73 +179,138 @@
             </nav>
 
             <!-- Main Content -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-4 main-content">
+            <main class="col main-content" id="mainContent">
                 <h1 class="mb-4 text-center text-primary">📝 Gestão de Produtos</h1>
 
                 <!-- Tela de Vendas -->
-                <h2 class="text-center">Venda de Produtos</h2>
-                <form method="POST">
-                    <div class="row">
+                <h2 class="text-center mb-4">Venda de Produtos</h2>
+                <form method="POST" action="{{ url_for('adicionar_ao_carrinho') }}">
+                    <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 g-3">
                         {% for produto in produtos %}
-                            <div class="col-md-4 col-sm-6 produto-card">
-                                <div class="card hover-shadow">
-                                    <img class="card-img-top produto-img" src="{{ url_for('static', filename='uploads/' + produto.imagem) }}" alt="{{ produto.nome }}">
-                                    <div class="card-body">
-                                        <h5 class="card-title">{{ produto.nome }}</h5>
-                                        <p class="card-text">Preço: R$ {{ produto.preco }}</p>
-                                        <p class="card-text">
-                                            Estoque Atual: {{ produto.estoque }} |
-                                            Reservado: {{ estoque_reservado.get(produto.id, 0) }} |
-                                            Disponível: {{ produto.estoque - estoque_reservado.get(produto.id, 0) }}
-                                        </p>
-                                        <input type="number" name="quantidade" class="form-control" placeholder="Quantidade" min="1" max="{{ produto.estoque - estoque_reservado.get(produto.id, 0) }}">
-                                        <input type="hidden" name="produto_id" value="{{ produto.id }}">
-                                        <button type="submit" class="btn btn-primary mt-2 w-100">Adicionar ao Carrinho</button>
+                        <div class="col produto-card">
+                            <div class="card hover-shadow h-100">
+                                <img class="card-img-top produto-img" src="{{ url_for('static', filename='uploads/' + produto.imagem) }}" alt="{{ produto.nome }}">
+                                <div class="card-body d-flex flex-column">
+                                    <h5 class="card-title">{{ produto.nome }}</h5>
+                                    <p class="card-text text-muted">Preço: R$ {{ produto.preco }}</p>
+                                    <p class="card-text small">
+                                        <strong>Estoque:</strong> {{ produto.estoque_dinamico }}<br>
+                                        <strong>Reservado:</strong> {{ estoque_reservado.get(produto.id, 0) }}<br>
+                                        <strong>Disponível:</strong> {{ produto.estoque_dinamico - estoque_reservado.get(produto.id, 0) }}<br>
+                                    </p>
+                                    <div class="input-group mb-2">
+                                        <button type="button" class="btn btn-danger btn-quantidade" onclick="decrementarQuantidade(this)">-</button>
+                                        <input type="number" name="quantidade" class="form-control text-center" value="0" min="0" max="{{ produto.estoque_dinamico - estoque_reservado.get(produto.id, 0) }}">
+                                        <button type="button" class="btn btn-success btn-quantidade" onclick="incrementarQuantidade(this)">+</button>
                                     </div>
+                                    <input type="hidden" name="produto_id" value="{{ produto.id }}">
+                                    <button type="submit" class="btn btn-primary w-100 mt-auto">Adicionar ao Carrinho</button>
                                 </div>
                             </div>
+                        </div>
                         {% endfor %}
                     </div>
                 </form>
 
-                <h3 class="mt-5">Carrinho de Compras</h3>
-                <table class="table table-bordered">
-                    <thead>
-                        <tr>
-                            <th>Produto</th>
-                            <th>Quantidade</th>
-                            <th>Preço Unitário</th>
-                            <th>Total</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in carrinho %}
+                <h3 class="mt-5">🛒 Carrinho de Compras</h3>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover mt-3 bg-white shadow-sm">
+                        <thead class="table-light">
                             <tr>
-                                <td>{{ item.produto.nome }}</td>
-                                <td>{{ item.quantidade }}</td>
-                                <td>R$ {{ item.produto.preco }}</td>
-                                <td>R$ {{ item.produto.preco * item.quantidade }}</td>
-                                <td>
-                                    <form method="POST" class="d-inline">
-                                        <button type="submit" class="btn btn-danger" name="remover_{{ item.produto.id }}">Remover</button>
-                                    </form>
-                                </td>
+                                <th>Produto</th>
+                                <th>Quantidade</th>
+                                <th>Preço Unitário</th>
+                                <th>Total</th>
+                                <th>Ações</th>
                             </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                <h4>Total: R$ {{ total }}</h4>
+                        </thead>
+                        <tbody>
+                            {% for item in carrinho %}
+                                <tr>
+                                    <td>
+                                        <img src="{{ url_for('static', filename='uploads/' + item.produto.imagem) }}" alt="{{ item.produto.nome }}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 5px; margin-right: 10px;">
+                                        {{ item.produto.nome }}
+                                    </td>
+                                    <td>{{ item.quantidade }}</td>
+                                    <td>R$ {{ item.produto.preco }}</td>
+                                    <td>R$ {{ item.produto.preco * item.quantidade }}</td>
+                                    <td>
+                                        <form method="POST" action="{{ url_for('remover_item') }}" class="remover-form">
+                                            <input type="hidden" name="produto_id" value="{{ item.produto.id }}">
+                                            <button type="submit" class="btn btn-danger btn-sm">Remover</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <h4 class="mt-3">Total: <strong>R$ {{ total }}</strong></h4>
 
                 <!-- Finalizar Venda -->
                 <form method="POST" action="{{ url_for('finalizar') }}">
-                    <textarea name="observacao" class="form-control" placeholder="Digite observações..." rows="3"></textarea>
-                    <button type="submit" class="btn btn-success mt-2 w-100">Finalizar Venda</button>
+                    <textarea name="observacao" class="form-control mt-4" placeholder="Digite observações..." rows="3"></textarea>
+                    <button type="submit" class="btn btn-success mt-2 w-100">✅ Finalizar Venda</button>
                 </form>
             </main>
         </div>
     </div>
 
+    <script>
+        // Alternar a sidebar
+        const toggleSidebarBtn = document.getElementById('toggleSidebar');
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.getElementById('mainContent');
+
+        toggleSidebarBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+            mainContent.classList.toggle('shifted');
+            toggleSidebarBtn.classList.toggle('open'); // Adiciona/remova a classe 'open' no botão
+        });
+
+        // Incrementar quantidade
+        function incrementarQuantidade(button) {
+            const input = button.previousElementSibling;
+            const max = parseInt(input.max, 10);
+            let value = parseInt(input.value, 10) || 0;
+            if (value < max) {
+                input.value = value + 1;
+            }
+        }
+
+        // Decrementar quantidade
+        function decrementarQuantidade(button) {
+            const input = button.nextElementSibling;
+            let value = parseInt(input.value, 10) || 0;
+            if (value > 0) {
+                input.value = value - 1;
+            }
+        }
+
+        // Evita que o formulário seja enviado ao clicar nos botões
+        document.querySelectorAll('button[type="button"]').forEach(button => {
+            button.addEventListener('click', event => {
+                event.preventDefault();
+            });
+        });
+
+        document.querySelectorAll('.remover-form').forEach(form => {
+            form.addEventListener('submit', event => {
+                event.preventDefault(); // Impede o envio padrão do formulário
+                const formData = new FormData(form);
+                fetch(form.action, {
+                    method: 'POST',
+                    body: formData
+                }).then(response => {
+                    if (response.ok) {
+                        location.reload(); // Recarrega a página para atualizar o carrinho
+                    } else {
+                        console.error('Erro ao remover item do carrinho.');
+                    }
+                }).catch(error => console.error('Erro ao processar a solicitação:', error));
+            });
+        });
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
